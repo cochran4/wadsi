@@ -1,0 +1,40 @@
+# Path to the raw dataset used in the analysis
+data_file: "data_pce.csv"
+
+# List of exposure variables (each with a name and type)
+# These are the primary variables for which you will estimate causal effects
+exposures:
+  - name: sbp                 # Systolic blood pressure (continuous)
+    type: continuous
+  - name: smoker_current      # Currently smoking (binary yes/no)
+    type: categorical
+  - name: hdl_c               # HDL cholesterol (continuous)
+    type: continuous
+  - name: tot_chol            # Total cholesterol (continuous)
+    type: continuous
+  - name: bp_treated          # Blood pressure medication use (binary yes/no)
+    type: categorical
+  - name: race                # Self-reported race (categorical)
+    type: categorical
+
+# Covariates to adjust for in all models
+# These are included in propensity score and response models
+covariates:
+  - name: age
+    type: continuous
+  - name: sex
+    type: categorical
+
+# Outcome variable (must be categorical with two levels or continuous)
+# Used for estimating the average treatment effect
+outcome:
+  name: diabetes
+  type: categorical
+  reference: 0
+
+# Variables for which a missingness indicator should be created
+# These will be added as binary covariates indicating if the original value was missing
+missingness_indicators:
+  - bp_treated
+  - smoker_current
+  
