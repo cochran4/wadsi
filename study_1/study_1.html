@@ -1,0 +1,1501 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.5.57">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Amy Cochran">
+
+<title>Causal inference / SEED</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="study_1_files/libs/clipboard/clipboard.min.js"></script>
+<script src="study_1_files/libs/quarto-html/quarto.js"></script>
+<script src="study_1_files/libs/quarto-html/popper.min.js"></script>
+<script src="study_1_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="study_1_files/libs/quarto-html/anchor.min.js"></script>
+<link href="study_1_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="study_1_files/libs/quarto-html/quarto-syntax-highlighting.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="study_1_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="study_1_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="study_1_files/libs/bootstrap/bootstrap.min.css" rel="stylesheet" id="quarto-bootstrap" data-mode="light">
+<script src="study_1_files/libs/kePrint-0.0.1/kePrint.js"></script>
+<link href="study_1_files/libs/lightable-0.0.1/lightable.css" rel="stylesheet">
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN") {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#introduction" id="toc-introduction" class="nav-link active" data-scroll-target="#introduction">Introduction</a></li>
+  <li><a href="#configuration" id="toc-configuration" class="nav-link" data-scroll-target="#configuration">Configuration</a></li>
+  <li><a href="#data-preparation" id="toc-data-preparation" class="nav-link" data-scroll-target="#data-preparation">Data preparation</a>
+  <ul class="collapse">
+  <li><a href="#coerce-data-type" id="toc-coerce-data-type" class="nav-link" data-scroll-target="#coerce-data-type">Coerce data type</a></li>
+  <li><a href="#add-missingness-indicators" id="toc-add-missingness-indicators" class="nav-link" data-scroll-target="#add-missingness-indicators">Add missingness indicators</a></li>
+  <li><a href="#impute-remaining-missingness" id="toc-impute-remaining-missingness" class="nav-link" data-scroll-target="#impute-remaining-missingness">Impute remaining missingness</a></li>
+  <li><a href="#create-dummy-variables" id="toc-create-dummy-variables" class="nav-link" data-scroll-target="#create-dummy-variables">Create dummy variables</a></li>
+  </ul></li>
+  <li><a href="#model-building" id="toc-model-building" class="nav-link" data-scroll-target="#model-building">Model building</a></li>
+  <li><a href="#effect-estimation" id="toc-effect-estimation" class="nav-link" data-scroll-target="#effect-estimation">Effect estimation</a>
+  <ul class="collapse">
+  <li><a href="#individual-likelihood-ratios" id="toc-individual-likelihood-ratios" class="nav-link" data-scroll-target="#individual-likelihood-ratios">Individual likelihood ratios</a></li>
+  <li><a href="#population-likelihood-ratios" id="toc-population-likelihood-ratios" class="nav-link" data-scroll-target="#population-likelihood-ratios">Population likelihood ratios</a></li>
+  <li><a href="#individual-attributable-fractions" id="toc-individual-attributable-fractions" class="nav-link" data-scroll-target="#individual-attributable-fractions">Individual attributable fractions</a></li>
+  <li><a href="#population-attributable-fraction" id="toc-population-attributable-fraction" class="nav-link" data-scroll-target="#population-attributable-fraction">Population attributable fraction</a></li>
+  <li><a href="#individual-shapley-decomposition" id="toc-individual-shapley-decomposition" class="nav-link" data-scroll-target="#individual-shapley-decomposition">Individual Shapley decomposition</a></li>
+  <li><a href="#population-shapley-decomposition" id="toc-population-shapley-decomposition" class="nav-link" data-scroll-target="#population-shapley-decomposition">Population Shapley decomposition</a></li>
+  </ul></li>
+  </ul>
+</nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Causal inference / SEED</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Amy Cochran </p>
+          </div>
+  </div>
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="introduction" class="level1">
+<h1>Introduction</h1>
+<p>This workbook outlines our approach to estimating how early-life factors may influence the likelihood of autism using data from the Study to Explore Early Development (SEED). Each factor is analyzed individually while adjusting for a consistent set of other early-life variables, including the other predictors of interest, that could confound its relationship with autism. For example, when studying the effect of preterm birth, we also adjust for maternal hypertension, smoking, and other perinatal factors that might affect both preterm birth and the likelihood of autism. This consistency ensures that each effect is estimated under the same causal framework, making comparisons across predictors meaningful.</p>
+<p>Our objective is to estimate causal contrasts: what would happen, on average, if a given early-life variable were set to one value rather than another value. We define two main contrasts: The <strong>conditional causal likelihood ratio</strong> describes how the likelihood of autism would change for individuals with covariate profile <span class="math inline">\(Z\)</span> if their predictor were set to <span class="math inline">\(x\)</span> instead of <span class="math inline">\(x'\)</span>. The <strong>marginal causal likelihood ratio</strong> describes how the overall likelihood of autism in the population would change if everyone’s predictor were set to <span class="math inline">\(x\)</span> instead of <span class="math inline">\(x'\)</span>.</p>
+<p>To make such statements, we rely on a structural model that encodes how variables are generated and sampled in SEED (see Figure below). Because SEED is a case–control study, which oversamples autism cases, we also introduce a sampling variable <span class="math inline">\(S\)</span> to distinguish the sampled population from the target population. Our causal targets are defined in the population, not merely within the sampled population.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="graphs.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Structural assumptions.</strong> (A) Directed graph showing the assumed causal relationships among variables and (B) the corresponding single-world intervention graph (SWIG). The predictor is <span class="math inline">\(X\)</span>, the control variables <span class="math inline">\(Z\)</span>, the outcome <span class="math inline">\(Y\)</span>, and the sampling indicator <span class="math inline">\(S\)</span>.</figcaption>
+</figure>
+</div>
+<p>A technical appendix details the strong assumptions required to interpret these results causally. Chief among them is no unmeasured confounding: after conditioning on the observed covariates <span class="math inline">\(Z\)</span>, the predictor <span class="math inline">\(X\)</span> can be treated as if randomly assigned. Correct specification of the relationship among <span class="math inline">\(Y\)</span>, <span class="math inline">\(X\)</span>, and <span class="math inline">\(Z\)</span> is also essential. Even with the right controls, a misspecified model can produce a biased estimand. To mitigate this risk, we use Bayesian Additive Regression Trees (BART), which flexibly captures nonlinearities and interactions while avoiding the overfitting that can occur with highly adaptive methods. BART’s balance between flexibility and regularization makes it a strong first pass for causal inference.</p>
+<p>After estimating causal contrasts with BART, we also define attributable fractions that summarize how the overall likelihood of autism would change under joint shifts in all the predictors. The <strong>conditional attributable fraction</strong> describes, for everyone with covariate profile <span class="math inline">\(Z\)</span>, how the observed likelihood of autism would change if all predictors were set to a common reference or minimum-risk level. The <strong>population attributable fraction</strong> applies the same idea to the entire population, comparing the observed likelihood of autism to the likelihood under a scenario in which everyone’s predictors are set to those reference or minimum-risk levels. The technical appendix describes how to translate the conditional attributable fraction to the population-level version.</p>
+<p>Because our analysis includes many predictors that are correlated and may interact, it is difficult to interpret what a joint shift in all predictors implies for any single variable. To address this, we use Shapley decomposition to express each person’s attributable fraction as the sum of contributions from individual predictors. From these individual contributions, we recover similar summaries at the population level, allowing the population attributable fraction to be expressed in terms of predictor-specific contributions as well.</p>
+</section>
+<section id="configuration" class="level1">
+<h1>Configuration</h1>
+<p>We begin by setting up the analysis environment. The first line sources an external R script, <code>R/imports.R</code>, which loads all necessary libraries and helper functions used throughout the notebook.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Load necessities</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="st">"R/imports.R"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Next, we load a configuration file, <code>config_1.yaml</code>, written in YAML format. This file specifies key details of the analysis, including where the raw data are located, which variables are treated as predictors, which are included as covariates, and how the outcome variable is defined. It also lists variables for which missingness indicators should be created and any modeling options or paths relevant to downstream steps. The configuration serves as a single source of truth for the analysis; editing it allows us to rerun the entire pipeline without changing the R code.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Load configuration</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>config <span class="ot">&lt;-</span> yaml<span class="sc">::</span><span class="fu">read_yaml</span>(<span class="st">"config_1.yaml"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Once the configuration is loaded, the dataset specified in the data_file field is read into R.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Load data</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>raw_df <span class="ot">&lt;-</span> readr<span class="sc">::</span><span class="fu">read_csv</span>(config<span class="sc">$</span>data_file)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>From the configuration, we then extract the variables that will enter the analysis: predictors, covariates, and the outcome. The predictors correspond to early-life factors for which we will estimate causal effects, the covariates are variables used to adjust for potential confounding, and the outcome defines the binary or continuous response of interest. These details are summarized in a table below to confirm that the configuration has been read correctly.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># </span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="co"># Extract predictor names and types</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>predictors_df <span class="ot">&lt;-</span> <span class="fu">do.call</span>(rbind, <span class="fu">lapply</span>(config<span class="sc">$</span>predictors, as.data.frame))</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>predictors_df<span class="sc">$</span>category <span class="ot">&lt;-</span> <span class="st">"Predictor"</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Extract covariates</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>covariates_df <span class="ot">&lt;-</span> <span class="fu">do.call</span>(rbind, <span class="fu">lapply</span>(config<span class="sc">$</span>covariates, as.data.frame))</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>covariates_df<span class="sc">$</span>category <span class="ot">&lt;-</span> <span class="st">"Covariate"</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Extract outcome</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>outcome_df <span class="ot">&lt;-</span> <span class="fu">as.data.frame</span>(config<span class="sc">$</span>outcome)</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>outcome_df<span class="sc">$</span>category <span class="ot">&lt;-</span> <span class="st">"Outcome"</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Combine all</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>var_summary <span class="ot">&lt;-</span> <span class="fu">rbind</span>(predictors_df, covariates_df, outcome_df[, <span class="fu">c</span>(<span class="st">"name"</span>, <span class="st">"type"</span>,<span class="st">"category"</span>)])</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a><span class="fu">names</span>(var_summary) <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"Name"</span>, <span class="st">"Type"</span>, <span class="st">"Category"</span>)</span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a><span class="co"># Reorder columns</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>var_summary <span class="ot">&lt;-</span> var_summary[, <span class="fu">c</span>(<span class="st">"Category"</span>, <span class="st">"Name"</span>, <span class="st">"Type"</span>)]</span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a><span class="co"># Render as markdown table</span></span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>knitr<span class="sc">::</span><span class="fu">kable</span>(var_summary, <span class="at">caption =</span> <span class="st">"Variables defined in the analysis configuration."</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<caption>Variables defined in the analysis configuration.</caption>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Category</th>
+<th style="text-align: left;">Name</th>
+<th style="text-align: left;">Type</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Predictor</td>
+<td style="text-align: left;">sbp</td>
+<td style="text-align: left;">continuous</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Predictor</td>
+<td style="text-align: left;">smoker_current</td>
+<td style="text-align: left;">categorical</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Predictor</td>
+<td style="text-align: left;">hdl_c</td>
+<td style="text-align: left;">continuous</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Predictor</td>
+<td style="text-align: left;">tot_chol</td>
+<td style="text-align: left;">continuous</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Predictor</td>
+<td style="text-align: left;">bp_treated</td>
+<td style="text-align: left;">categorical</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Predictor</td>
+<td style="text-align: left;">race</td>
+<td style="text-align: left;">categorical</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Covariate</td>
+<td style="text-align: left;">age</td>
+<td style="text-align: left;">continuous</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Covariate</td>
+<td style="text-align: left;">sex</td>
+<td style="text-align: left;">categorical</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Outcome</td>
+<td style="text-align: left;">diabetes</td>
+<td style="text-align: left;">categorical</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+<section id="data-preparation" class="level1">
+<h1>Data preparation</h1>
+<section id="coerce-data-type" class="level2">
+<h2 class="anchored" data-anchor-id="coerce-data-type">Coerce data type</h2>
+<p>We begin by preparing the analysis dataset. First, we extract only the variables relevant for our analysis: the predictors, covariates, and outcome specified in the configuration. We then coerce the data into the correct type, either continuous or categorical.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Prepare variables and coerce their data types</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>result <span class="ot">&lt;-</span> <span class="fu">coerce_variable_types</span>(raw_df,config)</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Inspect the cleaned dataset</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">--- Coerced Data Summary ---</span><span class="sc">\n</span><span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+--- Coerced Data Summary ---</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>coerced_df <span class="ot">&lt;-</span> result<span class="sc">$</span>coerced_df</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">summary</span>(coerced_df))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>      sbp         smoker_current     hdl_c           tot_chol     bp_treated 
+ Min.   : 76.33   0   :1529      Min.   :  5.00   Min.   : 71.0   0   : 343  
+ 1st Qu.:115.00   1   :1047      1st Qu.: 42.00   1st Qu.:161.0   1   :2284  
+ Median :126.00   NA's:3175      Median : 51.00   Median :188.0   NA's:3124  
+ Mean   :128.52                  Mean   : 53.73   Mean   :190.4              
+ 3rd Qu.:139.67                  3rd Qu.: 62.00   3rd Qu.:217.0              
+ Max.   :218.67                  Max.   :187.00   Max.   :446.0              
+ NA's   :868                     NA's   :752      NA's   :752                
+    race           age            sex          diabetes     
+ Black:1633   Min.   :40.00   Female:2911   Min.   :0.0000  
+ Other:2208   1st Qu.:49.00   Male  :2840   1st Qu.:0.0000  
+ White:1910   Median :59.00                 Median :0.0000  
+              Mean   :58.21                 Mean   :0.2153  
+              3rd Qu.:66.00                 3rd Qu.:0.0000  
+              Max.   :79.00                 Max.   :1.0000  
+                                            NA's   :210     </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Inspect per-predictor statistics</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">--- Continuous Predictor Summary ---</span><span class="sc">\n</span><span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+--- Continuous Predictor Summary ---</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>predictor_stats_df <span class="ot">&lt;-</span> result<span class="sc">$</span>predictor_stats_df</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(predictor_stats_df)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>  predictor      mean       sd
+1       sbp 128.51611 19.35054
+2     hdl_c  53.72575 16.37551
+3  tot_chol 190.43669 42.11713</code></pre>
+</div>
+</div>
+</section>
+<section id="add-missingness-indicators" class="level2">
+<h2 class="anchored" data-anchor-id="add-missingness-indicators">Add missingness indicators</h2>
+<p>For a small set of variables of interest, we generate missingness indicators to track whether a value was missing, and we replace missing values with zero for those variables to preserve information about potential patterns of missingness.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Add in missingness indicators</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>result <span class="ot">&lt;-</span> <span class="fu">add_missingness_indicators</span>(coerced_df, config)</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>indicated_df <span class="ot">&lt;-</span> result<span class="sc">$</span>indicated_df</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>final_config <span class="ot">&lt;-</span> config</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Summarize data </span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(indicated_df)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>      sbp         smoker_current     hdl_c           tot_chol    
+ Min.   : 76.33   0      :1529   Min.   :  5.00   Min.   : 71.0  
+ 1st Qu.:115.00   1      :1047   1st Qu.: 42.00   1st Qu.:161.0  
+ Median :126.00   Missing:3175   Median : 51.00   Median :188.0  
+ Mean   :128.52                  Mean   : 53.73   Mean   :190.4  
+ 3rd Qu.:139.67                  3rd Qu.: 62.00   3rd Qu.:217.0  
+ Max.   :218.67                  Max.   :187.00   Max.   :446.0  
+ NA's   :868                     NA's   :752      NA's   :752    
+   bp_treated      race           age            sex          diabetes     
+ 0      : 343   Black:1633   Min.   :40.00   Female:2911   Min.   :0.0000  
+ 1      :2284   Other:2208   1st Qu.:49.00   Male  :2840   1st Qu.:0.0000  
+ Missing:3124   White:1910   Median :59.00                 Median :0.0000  
+                             Mean   :58.21                 Mean   :0.2153  
+                             3rd Qu.:66.00                 3rd Qu.:0.0000  
+                             Max.   :79.00                 Max.   :1.0000  
+                                                           NA's   :210     </code></pre>
+</div>
+</div>
+</section>
+<section id="impute-remaining-missingness" class="level2">
+<h2 class="anchored" data-anchor-id="impute-remaining-missingness">Impute remaining missingness</h2>
+<p>We perform single imputation on the remaining missing values to create a complete dataset for analysis.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Single impuation using mice</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>imputed_df <span class="ot">&lt;-</span> <span class="fu">impute_missing_data</span>(indicated_df, final_config)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+ iter imp variable
+  1   1  sbp  hdl_c  tot_chol
+  2   1  sbp  hdl_c  tot_chol
+  3   1  sbp  hdl_c  tot_chol
+  4   1  sbp  hdl_c  tot_chol
+  5   1  sbp  hdl_c  tot_chol</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Summarize data</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(imputed_df)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>      sbp         smoker_current     hdl_c           tot_chol    
+ Min.   : 76.33   0      :1529   Min.   :  5.00   Min.   : 71.0  
+ 1st Qu.:115.00   1      :1047   1st Qu.: 42.00   1st Qu.:162.0  
+ Median :126.00   Missing:3175   Median : 51.00   Median :188.0  
+ Mean   :128.60                  Mean   : 53.89   Mean   :190.6  
+ 3rd Qu.:140.00                  3rd Qu.: 62.00   3rd Qu.:217.0  
+ Max.   :218.67                  Max.   :187.00   Max.   :446.0  
+                                                                 
+   bp_treated      race           age            sex          diabetes     
+ 0      : 343   Black:1633   Min.   :40.00   Female:2911   Min.   :0.0000  
+ 1      :2284   Other:2208   1st Qu.:49.00   Male  :2840   1st Qu.:0.0000  
+ Missing:3124   White:1910   Median :59.00                 Median :0.0000  
+                             Mean   :58.21                 Mean   :0.2153  
+                             3rd Qu.:66.00                 3rd Qu.:0.0000  
+                             Max.   :79.00                 Max.   :1.0000  
+                                                           NA's   :210     </code></pre>
+</div>
+</div>
+</section>
+<section id="create-dummy-variables" class="level2">
+<h2 class="anchored" data-anchor-id="create-dummy-variables">Create dummy variables</h2>
+<p>Finally, we convert categorical variables to dummy variables so they can be used in models that require numeric inputs. In each case, we drop the reference category to avoid collinearity, ensuring the most common category serves as the baseline.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Initialize dataframe for final step</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>analytic_df <span class="ot">&lt;-</span> <span class="fu">finalize_analytic_dataset</span>(imputed_df, final_config)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Dropped 210 rows with missing outcome (diabetes).</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb21"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(analytic_df)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>      sbp         smoker_current     hdl_c           tot_chol    
+ Min.   : 76.33   0      :1471   Min.   :  5.00   Min.   : 71.0  
+ 1st Qu.:115.00   1      :1017   1st Qu.: 42.00   1st Qu.:162.0  
+ Median :126.00   Missing:3053   Median : 51.00   Median :188.0  
+ Mean   :128.53                  Mean   : 53.94   Mean   :190.7  
+ 3rd Qu.:139.67                  3rd Qu.: 62.00   3rd Qu.:217.0  
+ Max.   :218.67                  Max.   :187.00   Max.   :446.0  
+   bp_treated      race           age            sex          diabetes     
+ 0      : 327   Black:1566   Min.   :40.00   Female:2820   Min.   :0.0000  
+ 1      :2175   Other:2113   1st Qu.:49.00   Male  :2721   1st Qu.:0.0000  
+ Missing:3039   White:1862   Median :59.00                 Median :0.0000  
+                             Mean   :58.16                 Mean   :0.2153  
+                             3rd Qu.:66.00                 3rd Qu.:0.0000  
+                             Max.   :79.00                 Max.   :1.0000  </code></pre>
+</div>
+</div>
+<p>Let’s check the updated list of covariates, predictors, and outcomes, now that we did a little pre-processing:</p>
+<p>The table below summarizes the predictors, covariates, and outcome used in the analysis, based on the configuration file.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb23"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="co"># </span></span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a><span class="co"># Extract predictor names and types</span></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>predictors_df <span class="ot">&lt;-</span> <span class="fu">do.call</span>(rbind, <span class="fu">lapply</span>(final_config<span class="sc">$</span>predictors, as.data.frame))</span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a>predictors_df<span class="sc">$</span>category <span class="ot">&lt;-</span> <span class="st">"predictor"</span></span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Extract covariates</span></span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a>covariates_df <span class="ot">&lt;-</span> <span class="fu">do.call</span>(rbind, <span class="fu">lapply</span>(final_config<span class="sc">$</span>covariates, as.data.frame))</span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a>covariates_df<span class="sc">$</span>category <span class="ot">&lt;-</span> <span class="st">"Covariate"</span></span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Extract outcome</span></span>
+<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a>outcome_df <span class="ot">&lt;-</span> <span class="fu">as.data.frame</span>(final_config<span class="sc">$</span>outcome)</span>
+<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a>outcome_df<span class="sc">$</span>category <span class="ot">&lt;-</span> <span class="st">"Outcome"</span></span>
+<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-14"><a href="#cb23-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Combine all</span></span>
+<span id="cb23-15"><a href="#cb23-15" aria-hidden="true" tabindex="-1"></a>var_summary <span class="ot">&lt;-</span> <span class="fu">rbind</span>(predictors_df, covariates_df, outcome_df[, <span class="fu">c</span>(<span class="st">"name"</span>, <span class="st">"type"</span>,<span class="st">"category"</span>)])</span>
+<span id="cb23-16"><a href="#cb23-16" aria-hidden="true" tabindex="-1"></a><span class="fu">names</span>(var_summary) <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"Name"</span>, <span class="st">"Type"</span>, <span class="st">"Category"</span>)</span>
+<span id="cb23-17"><a href="#cb23-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-18"><a href="#cb23-18" aria-hidden="true" tabindex="-1"></a><span class="co"># Reorder columns</span></span>
+<span id="cb23-19"><a href="#cb23-19" aria-hidden="true" tabindex="-1"></a>var_summary <span class="ot">&lt;-</span> var_summary[, <span class="fu">c</span>(<span class="st">"Category"</span>, <span class="st">"Name"</span>, <span class="st">"Type"</span>)]</span>
+<span id="cb23-20"><a href="#cb23-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-21"><a href="#cb23-21" aria-hidden="true" tabindex="-1"></a><span class="co"># Render as markdown table</span></span>
+<span id="cb23-22"><a href="#cb23-22" aria-hidden="true" tabindex="-1"></a>knitr<span class="sc">::</span><span class="fu">kable</span>(var_summary, <span class="at">caption =</span> <span class="st">"Variables defined in the analysis configuration."</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<caption>Variables defined in the analysis configuration.</caption>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Category</th>
+<th style="text-align: left;">Name</th>
+<th style="text-align: left;">Type</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">predictor</td>
+<td style="text-align: left;">sbp</td>
+<td style="text-align: left;">continuous</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">predictor</td>
+<td style="text-align: left;">smoker_current</td>
+<td style="text-align: left;">categorical</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">predictor</td>
+<td style="text-align: left;">hdl_c</td>
+<td style="text-align: left;">continuous</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">predictor</td>
+<td style="text-align: left;">tot_chol</td>
+<td style="text-align: left;">continuous</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">predictor</td>
+<td style="text-align: left;">bp_treated</td>
+<td style="text-align: left;">categorical</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">predictor</td>
+<td style="text-align: left;">race</td>
+<td style="text-align: left;">categorical</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Covariate</td>
+<td style="text-align: left;">age</td>
+<td style="text-align: left;">continuous</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Covariate</td>
+<td style="text-align: left;">sex</td>
+<td style="text-align: left;">categorical</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Outcome</td>
+<td style="text-align: left;">diabetes</td>
+<td style="text-align: left;">categorical</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+</section>
+<section id="model-building" class="level1">
+<h1>Model building</h1>
+<p>We next fit a Bayesian Additive Regression Trees (BART) model to estimate the likelihood of an autism case for a person with a given predictor <span class="math inline">\(X\)</span> and covariate profile <span class="math inline">\(Z\)</span> within the sampled population:</p>
+<p><span class="math display">\[\Pr(Y = 1 \mid X, Z, S = 1),\]</span>where <span class="math inline">\(Y\)</span> is the outcome, <span class="math inline">\(X\)</span> is the predictor, and <span class="math inline">\(Z\)</span> is a vector of other covariates and predictors, and <span class="math inline">\(S = 1\)</span> is a sampling indicator, denoting the individual is sampled. BART provides a flexible, nonparametric approach to modeling the conditional likelihood. It automatically captures nonlinearities and interactions among predictors without requiring us to specify them in advance. The fitted model (<code>bart_fit</code>) serves as the foundation for subsequent effect estimation.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb24"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Key variables</span></span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>outcome_var  <span class="ot">&lt;-</span> final_config<span class="sc">$</span>outcome<span class="sc">$</span>name</span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>predictor_vars <span class="ot">&lt;-</span> <span class="fu">vapply</span>(final_config<span class="sc">$</span>predictors, <span class="st">`</span><span class="at">[[</span><span class="st">`</span>, <span class="fu">character</span>(<span class="dv">1</span>), <span class="st">"name"</span>)</span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a>covariates <span class="ot">&lt;-</span> <span class="fu">setdiff</span>(<span class="fu">names</span>(analytic_df), <span class="fu">c</span>(outcome_var, predictor_vars))</span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Fit one BART model jointly over all predictors and covariates</span></span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a>bart_fit <span class="ot">&lt;-</span> dbarts<span class="sc">::</span><span class="fu">bart</span>(</span>
+<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">x.train =</span> analytic_df[, <span class="fu">c</span>(covariates, predictor_vars)],</span>
+<span id="cb24-9"><a href="#cb24-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">y.train =</span> analytic_df[[outcome_var]],</span>
+<span id="cb24-10"><a href="#cb24-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">keeptrees =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb24-11"><a href="#cb24-11" aria-hidden="true" tabindex="-1"></a>  <span class="at">verbose =</span> <span class="cn">TRUE</span>,     <span class="co"># turn off later if it clutters logs</span></span>
+<span id="cb24-12"><a href="#cb24-12" aria-hidden="true" tabindex="-1"></a>  <span class="at">nchain =</span> <span class="dv">4</span>L,</span>
+<span id="cb24-13"><a href="#cb24-13" aria-hidden="true" tabindex="-1"></a>  <span class="at">nskip =</span> <span class="dv">500</span>L,       <span class="co"># warm-up (burn-in)</span></span>
+<span id="cb24-14"><a href="#cb24-14" aria-hidden="true" tabindex="-1"></a>  <span class="at">ndpost =</span> <span class="dv">2000</span>L      <span class="co"># number of posterior samples per chain</span></span>
+<span id="cb24-15"><a href="#cb24-15" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+Running BART with binary y
+
+number of trees: 200
+number of chains: 4, default number of threads 1
+tree thinning rate: 1
+Prior:
+    k prior fixed to 2.000000
+    power and base for tree prior: 2.000000 0.950000
+    use quantiles for rule cut points: false
+    proposal probabilities: birth/death 0.50, swap 0.10, change 0.40; birth 0.50
+data:
+    number of training observations: 5541
+    number of test observations: 0
+    number of explanatory variables: 14
+
+Cutoff rules c in x&lt;=c vs x&gt;c
+Number of cutoffs: (var: number of possible c):
+(1: 100) (2: 100) (3: 100) (4: 100) (5: 100) 
+(6: 100) (7: 100) (8: 100) (9: 100) (10: 100) 
+(11: 100) (12: 100) (13: 100) (14: 100) 
+offsets:
+    reg : 0.00 0.00 0.00 0.00 0.00
+Running mcmc loop:
+[1] iteration: 100 (of 2000)
+[1] iteration: 200 (of 2000)
+[1] iteration: 300 (of 2000)
+[1] iteration: 400 (of 2000)
+[1] iteration: 500 (of 2000)
+[1] iteration: 600 (of 2000)
+[1] iteration: 700 (of 2000)
+[1] iteration: 800 (of 2000)
+[1] iteration: 900 (of 2000)
+[1] iteration: 1000 (of 2000)
+[1] iteration: 1100 (of 2000)
+[1] iteration: 1200 (of 2000)
+[1] iteration: 1300 (of 2000)
+[1] iteration: 1400 (of 2000)
+[1] iteration: 1500 (of 2000)
+[1] iteration: 1600 (of 2000)
+[1] iteration: 1700 (of 2000)
+[1] iteration: 1800 (of 2000)
+[1] iteration: 1900 (of 2000)
+[1] iteration: 2000 (of 2000)
+[2] iteration: 100 (of 2000)
+[2] iteration: 200 (of 2000)
+[2] iteration: 300 (of 2000)
+[2] iteration: 400 (of 2000)
+[2] iteration: 500 (of 2000)
+[2] iteration: 600 (of 2000)
+[2] iteration: 700 (of 2000)
+[2] iteration: 800 (of 2000)
+[2] iteration: 900 (of 2000)
+[2] iteration: 1000 (of 2000)
+[2] iteration: 1100 (of 2000)
+[2] iteration: 1200 (of 2000)
+[2] iteration: 1300 (of 2000)
+[2] iteration: 1400 (of 2000)
+[2] iteration: 1500 (of 2000)
+[2] iteration: 1600 (of 2000)
+[2] iteration: 1700 (of 2000)
+[2] iteration: 1800 (of 2000)
+[2] iteration: 1900 (of 2000)
+[2] iteration: 2000 (of 2000)
+[3] iteration: 100 (of 2000)
+[3] iteration: 200 (of 2000)
+[3] iteration: 300 (of 2000)
+[3] iteration: 400 (of 2000)
+[3] iteration: 500 (of 2000)
+[3] iteration: 600 (of 2000)
+[3] iteration: 700 (of 2000)
+[3] iteration: 800 (of 2000)
+[3] iteration: 900 (of 2000)
+[3] iteration: 1000 (of 2000)
+[3] iteration: 1100 (of 2000)
+[3] iteration: 1200 (of 2000)
+[3] iteration: 1300 (of 2000)
+[3] iteration: 1400 (of 2000)
+[3] iteration: 1500 (of 2000)
+[3] iteration: 1600 (of 2000)
+[3] iteration: 1700 (of 2000)
+[3] iteration: 1800 (of 2000)
+[3] iteration: 1900 (of 2000)
+[3] iteration: 2000 (of 2000)
+[4] iteration: 100 (of 2000)
+[4] iteration: 200 (of 2000)
+[4] iteration: 300 (of 2000)
+[4] iteration: 400 (of 2000)
+[4] iteration: 500 (of 2000)
+[4] iteration: 600 (of 2000)
+[4] iteration: 700 (of 2000)
+[4] iteration: 800 (of 2000)
+[4] iteration: 900 (of 2000)
+[4] iteration: 1000 (of 2000)
+[4] iteration: 1100 (of 2000)
+[4] iteration: 1200 (of 2000)
+[4] iteration: 1300 (of 2000)
+[4] iteration: 1400 (of 2000)
+[4] iteration: 1500 (of 2000)
+[4] iteration: 1600 (of 2000)
+[4] iteration: 1700 (of 2000)
+[4] iteration: 1800 (of 2000)
+[4] iteration: 1900 (of 2000)
+[4] iteration: 2000 (of 2000)
+total seconds in loop: 59.203989
+
+Tree sizes, last iteration:
+[1] 4 2 2 3 2 3 2 2 3 2 2 2 3 3 3 3 3 2 
+4 2 2 2 3 2 2 2 3 2 3 2 2 3 2 2 3 2 2 3 
+2 1 1 2 2 2 2 3 3 2 2 2 5 2 2 4 2 2 3 2 
+3 2 3 2 2 3 2 2 2 3 3 2 4 2 3 3 3 3 2 2 
+2 3 2 2 2 2 1 1 3 1 3 3 2 2 3 2 1 1 2 2 
+4 3 3 2 2 3 2 5 3 2 2 2 1 2 3 2 2 2 2 2 
+3 2 3 2 2 4 3 2 2 2 2 2 3 2 2 3 2 2 3 3 
+2 3 3 3 2 2 3 1 3 2 2 2 2 4 2 1 2 2 2 3 
+2 3 2 2 5 2 3 2 3 2 2 2 2 2 2 3 3 2 3 2 
+2 2 2 2 3 3 2 2 1 2 2 2 2 2 2 2 2 4 2 2 
+4 1 
+[2] 2 2 2 2 4 1 3 3 4 4 2 2 4 2 2 3 3 1 
+2 2 2 3 2 3 3 2 2 3 2 3 2 4 1 3 1 2 3 3 
+1 1 3 4 2 3 4 2 2 1 3 3 5 2 2 3 2 2 3 3 
+2 2 4 2 3 2 2 2 3 2 4 3 3 3 2 2 2 3 5 1 
+2 3 2 2 2 4 3 2 2 3 2 2 2 2 3 2 2 3 2 2 
+2 1 2 2 1 4 4 3 2 2 2 2 3 3 2 2 2 2 2 2 
+3 2 2 2 2 2 3 3 3 2 2 2 2 2 4 4 3 3 3 3 
+2 4 2 4 4 2 2 3 2 2 2 2 2 2 3 2 2 3 2 2 
+2 2 2 2 2 2 2 5 3 2 3 4 2 2 3 3 2 1 1 2 
+1 2 1 2 2 2 3 2 1 2 2 3 4 2 4 2 2 2 3 4 
+2 2 
+[3] 2 5 3 2 3 2 2 2 1 3 2 3 2 4 2 2 2 2 
+3 4 2 2 2 3 3 3 2 2 2 2 2 2 2 2 2 3 2 2 
+5 2 2 2 2 2 2 4 2 3 2 2 2 3 2 5 2 3 4 2 
+2 2 2 2 4 2 2 2 2 5 4 2 2 2 2 2 2 2 3 3 
+2 2 3 2 1 2 4 2 2 2 3 2 3 2 2 3 3 3 2 2 
+2 2 2 4 2 3 2 3 3 3 2 1 2 2 2 4 2 3 2 2 
+2 3 3 4 2 3 2 2 4 2 2 2 2 2 1 3 2 2 1 2 
+2 2 2 3 4 5 2 3 2 3 2 2 2 2 2 4 2 3 3 2 
+2 4 2 2 3 3 2 3 2 3 2 2 2 3 3 3 2 3 2 2 
+2 2 6 2 2 2 2 1 2 3 2 3 2 2 5 3 2 2 4 3 
+3 2 
+[4] 3 3 2 1 2 3 5 3 2 4 2 2 1 2 2 2 1 3 
+3 3 2 4 2 2 1 2 3 2 1 2 3 2 2 2 2 3 2 3 
+2 3 2 2 3 1 2 2 2 3 2 2 3 4 5 2 2 3 2 2 
+3 2 4 2 2 1 3 2 2 2 2 3 2 3 2 2 3 4 2 2 
+2 2 3 2 2 2 2 2 2 3 2 2 2 1 3 2 2 3 4 2 
+2 3 2 2 2 2 3 2 2 2 3 5 2 2 3 2 2 3 2 1 
+3 2 2 3 2 2 3 4 2 2 2 3 2 1 2 2 2 4 5 3 
+2 2 2 2 2 2 2 2 2 3 2 2 1 2 2 1 4 2 2 3 
+2 4 2 2 2 2 1 2 2 5 3 2 2 2 2 2 2 2 2 3 
+2 2 3 2 2 2 2 3 2 3 1 3 2 3 2 2 2 2 3 1 
+2 3 
+
+Variable Usage, last iteration (var:count):
+(1: 86) (2: 80) (3: 71) (4: 83) (5: 85) 
+(6: 71) (7: 108) (8: 98) (9: 59) (10: 66) 
+(11: 81) (12: 85) (13: 72) (14: 73) 
+DONE BART</code></pre>
+</div>
+</div>
+<p>We assessed the BART fit using standard Bayesian diagnostics. First, we inspected mixing and sampling efficiency by looking at the posterior draws of the fitted values and summarizing their effective sample size. This provides a simple check that the MCMC is exploring the posterior rather than getting stuck.</p>
+<p>Second, we examined posterior predictive performance for the binary outcome. We computed the posterior mean predicted probability for each individual and compared these to the observed outcomes, including a simple calibration table that groups individuals by predicted risk and reports the average predicted and observed event rates in each group.</p>
+<p>These checks are not exhaustive, but they give us a basic sense that the model is mixing, producing stable summaries, and yielding predictions that are broadly consistent with the observed data.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb26"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Run model diagnostics</span></span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a>diag_results <span class="ot">&lt;-</span> <span class="fu">model_diagnostics</span>(</span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">bart_fit =</span> bart_fit,</span>
+<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">analytic_df =</span> analytic_df,</span>
+<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">outcome_var =</span> final_config<span class="sc">$</span>outcome<span class="sc">$</span>name,</span>
+<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">save_path =</span> <span class="st">"outputs/model_diagnostics"</span></span>
+<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Below we show the calibration plot:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb27"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a>diag_results<span class="sc">$</span>plots<span class="sc">$</span>calib</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="study_1_files/figure-html/unnamed-chunk-12-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="effect-estimation" class="level1">
+<h1>Effect estimation</h1>
+<section id="individual-likelihood-ratios" class="level2">
+<h2 class="anchored" data-anchor-id="individual-likelihood-ratios">Individual likelihood ratios</h2>
+<p>We use the fitted BART model to estimate individual and population causal likelihood ratios. Each posterior draw <span class="math inline">\(\theta^{(m)}\)</span> of parameters from the BART model provides an estimate of the likelihood of being an autism case <span class="math display">\[\widehat{\Pr}_{\theta^{(m)}}(Y=1 \mid X, Z, S=1) \approx \Pr(Y = 1 \mid X, Z, S = 1)\]</span> Because this model can be evaluated for any combination of <span class="math inline">\(X\)</span> and <span class="math inline">\(Z\)</span>, we can use it to explore counterfactuals: changing one predictor at a time while keeping all other variables fixed at their observed values.</p>
+<p>As shown in the technical appendix, these counterfactuals can be used to estimate <strong>individual causal likelihood ratios:</strong> <span class="math display">\[\mathrm{LR}(Z) = \frac{\Pr(Y(x)=1 \mid Z)}{\Pr(Y(x')=1 \mid Z)},\]</span> measuring how much more (or less) likely an individual is to be an autism case if their predictor <span class="math inline">\(X\)</span> were set to one value <span class="math inline">\(x\)</span> versus another <span class="math inline">\(x'\)</span>, conditional on their covariates <span class="math inline">\(Z\)</span>. Here, <span class="math inline">\(Y(x)\)</span> and <span class="math inline">\(Y(x')\)</span> represent the potential outcomes that would arise in these two hypothetical scenarios. Under <strong>strong</strong> assumptions (such as no unmeasured confounding and a rare-outcome approximation), the odds ratio of the model-implied probabilities approximates this causal likelihood ratio: <span class="math display">\[\frac{\widehat{\Pr}(Y=1 \mid X=x, Z, S=1; \theta^{(m)})/\widehat{\Pr}(Y=0 \mid X=x, Z, S=1; \theta^{(m)})}
+{\widehat{\Pr}(Y=1 \mid X=x', Z, S=1; \theta^{(m)})/\widehat{\Pr}(Y=0 \mid X=x', Z, S=1; \theta^{(m)})}\]</span> <span class="math display">\[:= \widehat{\mathrm{LR}}(Z;\theta^{(m)}) \approx \mathrm{LR}(Z).\]</span></p>
+<p>This computation is repeated for each individual, each predictor, and each posterior draw of the BART model parameters. For categorical predictors, we contrast every level of the predictor (<span class="math inline">\(x\)</span>) against the most common level (<span class="math inline">\(x'\)</span>). For continuous predictors, we contrast values one standard deviation above and below the mean (<span class="math inline">\(x = \mu + \sigma\)</span> and <span class="math inline">\(x' = \mu - \sigma\)</span>), with the mean and standard deviation computed from the data before imputation.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb28"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Compute causal likelihood ratios (individual and population)</span></span>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>clr_results <span class="ot">&lt;-</span> <span class="fu">compute_causal_likelihood_ratios</span>(</span>
+<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">bart_fit =</span> bart_fit,</span>
+<span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">analytic_df =</span> analytic_df,</span>
+<span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">config =</span> final_config,</span>
+<span id="cb28-6"><a href="#cb28-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">predictor_stats_df =</span> predictor_stats_df</span>
+<span id="cb28-7"><a href="#cb28-7" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>These contrasts produce a posterior distribution of individual likelihood ratios, which are then summarized as posterior means for visualization:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb29"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot individual likelihood ratios</span></span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_conditional_clr</span>(clr_results<span class="sc">$</span>clr_summary_df,</span>
+<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a>                    <span class="at">save_path =</span> <span class="st">"outputs/individual_lr.png"</span>,</span>
+<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a>                    <span class="at">save_path_vertical =</span> <span class="st">"outputs/individual_lr_vertical.png"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p><img src="outputs/individual_lr_vertical.png" class="img-fluid" style="width:80.0%"></p>
+</section>
+<section id="population-likelihood-ratios" class="level2">
+<h2 class="anchored" data-anchor-id="population-likelihood-ratios">Population likelihood ratios</h2>
+<p>Next, we move from individual to <strong>population causal likelihood ratios:</strong>: <span class="math display">\[\mathrm{LR}_{\mathrm{causal}} = \frac{\Pr(Y(x)=1)}{\Pr(Y(x')=1)},\]</span> measuring how much more likely is an individual to be an autism case in world where everyone’s predictor was set to <span class="math inline">\(x\)</span> compared to a world where everyone’s predictor was set than <span class="math inline">\(x'\)</span>. We compute population ratios for every individual likelihood ratio plotted above. In the technical appendix, we show that this quantity can be recovered as a weighted average of individual likelihood ratios, with weights given proportional to: <span class="math display">\[\frac{
+\Pr(Y = 1 \mid Z, X = x', S = 1)\, \Pr(Y = 1) / \Pr(Y = 1 \mid S = 1)
+}{
+\sum_{y=0,1}
+\Pr(Y = y \mid Z, X = x', S = 1)\, \Pr(Y = y) / \Pr(Y = y \mid S = 1)
+}.\]</span></p>
+<p>In our implementation, we obtain estimates for each term in the above expression as follows:</p>
+<ul>
+<li><p>Estimates for <span class="math inline">\(\Pr(Y=1)\)</span> and <span class="math inline">\(\Pr(Y=0)\)</span> are supplied in the <code>config</code>, reflecting the prevalence of autism cases and population controls in the target population (these need not sum to one if the target population includes other diagnostic groups).</p></li>
+<li><p>Estimates for <span class="math inline">\(\Pr(Y=1 \mid S=1)\)</span> and <span class="math inline">\(\Pr(Y=0 \mid S=1)\)</span> are computed as sample proportions directly from the analytic dataset</p></li>
+<li><p>Estimates for <span class="math inline">\(\Pr(Y=y \mid Z, X=x', S=1)\)</span> are recovered from the fitted BART model for each posterior draw <span class="math inline">\(\theta^{(m)}.\)</span></p></li>
+</ul>
+<p>For each posterior draw, we use these estimates to form <span class="math display">\[\widehat{W}(Z;\theta^{(m)})
+     := \frac{
+    \widehat{\Pr}(Y = 1 \mid Z, X = x', S = 1; \theta^{(m)})\, \widehat{\Pr}(Y = 1) / \widehat{\Pr}(Y = 1 \mid S = 1)
+    }{
+    \sum_{y=0,1} \widehat{\Pr}(Y = y \mid Z, X = x', S = 1; \theta^{(m)})\, \widehat{\Pr}(Y = y) / \widehat{\Pr}(Y = y \mid S = 1)}.\]</span> These weights are then used to estimate a weighted mean of the individual likelihood ratios: <span class="math display">\[\mathrm{LR}_{\mathrm{causal}} \approx
+    \frac{\mathbb{E}_N \left[ \widehat{W}(Z;\theta^{(m)})
+    \widehat{\mathrm{LR}}(Z;\theta^{(m)}) \right]
+    }{\mathbb{E}_N \left[\widehat{W}(Z;\theta^{(m)}) \right]
+    }.\]</span> Here, <span class="math inline">\(\mathbb{E}_N\)</span> denotes a sample average over the analytic dataset. From the posterior draws, we recover a posterior mean and 95% credible interval for the population causal likelihood ratio. These summaries appear in the table below:</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb30"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Put together table of population likelihood ratios</span></span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a>clr_results<span class="sc">$</span>weighted_summary <span class="sc">|&gt;</span></span>
+<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">mutate</span>(</span>
+<span id="cb30-4"><a href="#cb30-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">posterior_mean =</span> <span class="fu">round</span>(posterior_mean, <span class="dv">2</span>),</span>
+<span id="cb30-5"><a href="#cb30-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">ci_lower =</span> <span class="fu">round</span>(ci_lower, <span class="dv">2</span>),</span>
+<span id="cb30-6"><a href="#cb30-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">ci_upper =</span> <span class="fu">round</span>(ci_upper, <span class="dv">2</span>)</span>
+<span id="cb30-7"><a href="#cb30-7" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb30-8"><a href="#cb30-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable</span>(</span>
+<span id="cb30-9"><a href="#cb30-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">caption =</span> <span class="st">"Posterior mean and 95% credible interval for population likelihood ratios"</span>,</span>
+<span id="cb30-10"><a href="#cb30-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">col.names =</span> <span class="fu">c</span>(<span class="st">"Predictor"</span>, <span class="st">"Contrast"</span>, <span class="st">"Posterior Mean"</span>, <span class="st">"95% CI Lower"</span>, <span class="st">"95% CI Upper"</span>),</span>
+<span id="cb30-11"><a href="#cb30-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">align =</span> <span class="st">"lcccc"</span>,</span>
+<span id="cb30-12"><a href="#cb30-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">booktabs =</span> <span class="cn">TRUE</span></span>
+<span id="cb30-13"><a href="#cb30-13" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb30-14"><a href="#cb30-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable_styling</span>(<span class="at">full_width =</span> <span class="cn">FALSE</span>, <span class="at">position =</span> <span class="st">"center"</span>, <span class="at">bootstrap_options =</span> <span class="fu">c</span>(<span class="st">"striped"</span>, <span class="st">"hover"</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<table class="table table-striped table-hover caption-top table-sm small" data-quarto-postprocess="true">
+<caption>Posterior mean and 95% credible interval for population likelihood ratios</caption>
+<thead>
+<tr class="header">
+<th style="text-align: left;" data-quarto-table-cell-role="th"></th>
+<th style="text-align: left;" data-quarto-table-cell-role="th">Predictor</th>
+<th style="text-align: center;" data-quarto-table-cell-role="th">Contrast</th>
+<th style="text-align: center;" data-quarto-table-cell-role="th">Posterior Mean</th>
+<th style="text-align: center;" data-quarto-table-cell-role="th">95% CI Lower</th>
+<th style="text-align: center;" data-quarto-table-cell-role="th">95% CI Upper</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">2.5%...1</td>
+<td style="text-align: left;">sbp</td>
+<td style="text-align: center;">+1SD vs -1SD</td>
+<td style="text-align: center;">0.94</td>
+<td style="text-align: center;">0.70</td>
+<td style="text-align: center;">1.24</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">2.5%...2</td>
+<td style="text-align: left;">smoker_current</td>
+<td style="text-align: center;">1 vs 0</td>
+<td style="text-align: center;">0.89</td>
+<td style="text-align: center;">0.69</td>
+<td style="text-align: center;">1.12</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">2.5%...3</td>
+<td style="text-align: left;">smoker_current</td>
+<td style="text-align: center;">Missing vs 0</td>
+<td style="text-align: center;">0.83</td>
+<td style="text-align: center;">0.69</td>
+<td style="text-align: center;">0.98</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">2.5%...4</td>
+<td style="text-align: left;">hdl_c</td>
+<td style="text-align: center;">+1SD vs -1SD</td>
+<td style="text-align: center;">0.37</td>
+<td style="text-align: center;">0.26</td>
+<td style="text-align: center;">0.49</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">2.5%...5</td>
+<td style="text-align: left;">tot_chol</td>
+<td style="text-align: center;">+1SD vs -1SD</td>
+<td style="text-align: center;">0.40</td>
+<td style="text-align: center;">0.29</td>
+<td style="text-align: center;">0.54</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">2.5%...6</td>
+<td style="text-align: left;">bp_treated</td>
+<td style="text-align: center;">0 vs 1</td>
+<td style="text-align: center;">0.53</td>
+<td style="text-align: center;">0.38</td>
+<td style="text-align: center;">0.72</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">2.5%...7</td>
+<td style="text-align: left;">bp_treated</td>
+<td style="text-align: center;">Missing vs 1</td>
+<td style="text-align: center;">0.31</td>
+<td style="text-align: center;">0.26</td>
+<td style="text-align: center;">0.37</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">2.5%...8</td>
+<td style="text-align: left;">race</td>
+<td style="text-align: center;">Black vs Other</td>
+<td style="text-align: center;">0.81</td>
+<td style="text-align: center;">0.66</td>
+<td style="text-align: center;">0.99</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">2.5%...9</td>
+<td style="text-align: left;">race</td>
+<td style="text-align: center;">White vs Other</td>
+<td style="text-align: center;">0.56</td>
+<td style="text-align: center;">0.46</td>
+<td style="text-align: center;">0.68</td>
+</tr>
+</tbody>
+</table>
+
+
+</div>
+</div>
+</section>
+<section id="individual-attributable-fractions" class="level2">
+<h2 class="anchored" data-anchor-id="individual-attributable-fractions">Individual attributable fractions</h2>
+<p>We next consider individual and population attributable fractions. The individual attributable fraction measures how much of a person’s estimated likelihood of being an autism case can be attributed to their own predictor profile rather than to a reference, low-likelihood profile.</p>
+<p>This target differs in two key ways from the causal likelihood ratios considered earlier. First, causal likelihood ratios compare two hypothetical values of a single predictor (e.g., “smoking” vs.&nbsp;“not smoking”), without regard to how common those values are in the population. Second, they vary one predictor at a time while holding everything else fixed. By contrast, we use attributable fractions to capture the joint contribution of all predictors <span class="math inline">\(X\)</span> at once, and express that contribution relative to a realistic baseline, defined by an empirically chosen reference profile.</p>
+<p>Mathematically, the <strong>individual attributable fraction</strong> is defined as <span class="math display">\[AF(X,Z) := \frac{\pi(X,Z)-\pi(x',Z)}
+{\pi(X,Z)},\]</span> where <span class="math inline">\(\pi(x,z)=\Pr\big(Y(x)=1 \mid Z=z\big)\)</span> is the probability of potential outcome <span class="math inline">\(Y(x)\)</span> for an individual with covariate profile <span class="math inline">\(Z=z\)</span>. Here, <span class="math inline">\(X\)</span> represents the full vector of predictors of interest. In our implementation, <span class="math inline">\(x'\)</span> is chosen empirically as the set of predictors belonging to the individual in the analytic sample with the lowest predicted probability of autism under the fitted model. The numerator, <span class="math inline">\(\pi(X, Z) - \pi(x’, Z)\)</span>, captures how much the probability of being a case would decrease if all predictors were set to this low-likelihood reference instead of the person’s observed predictor profile. The denominator rescales this change by the person’s own predicted probability of being a case, yielding a proportion of their likelihood that is “attributable” to their deviation from the reference profile.</p>
+<p>Because the attributable fraction can be written as one minus a causal likelihood ratio comparing the reference and observed predictor profiles, it can be estimated in parallel with the likelihood-ratio calculations. For each posterior draw <span class="math inline">\(\theta^{(m)}\)</span> from the fitted BART model, we compute <span class="math display">\[1 - \frac{\widehat{\Pr}(Y=1 \mid X=x', Z, S=1; \theta^{(m)})/\widehat{\Pr}(Y=0 \mid X=x', Z, S=1; \theta^{(m)})}
+{\widehat{\Pr}(Y=1 \mid X, Z, S=1; \theta^{(m)})/\widehat{\Pr}(Y=0 \mid X, Z, S=1; \theta^{(m)})}\]</span> <span class="math display">\[\widehat{\mathrm{AF}}(X,Z;\theta^{(m)}) \approx \mathrm{AF}(X,Z).\]</span> Operationally, for each posterior draw and each person, we use the fitted BART model to make two predictions: one where their predictors are set to the reference profile <span class="math inline">\(x'\)</span>, and one where predictors remain at their observed values <span class="math inline">\(X\)</span>, with covariates <span class="math inline">\(Z\)</span> always held fixed at their observed values. The ratio of these predicted odds defines a causal likelihood ratio comparing “reference” vs.&nbsp;“as observed”; one minus that ratio yields an estimate of the individual attributable fraction. Averaging <span class="math inline">\(\widehat{AF}(X, Z; \theta^{(m)})\)</span> over posterior draws gives the posterior mean attributable fraction for each person.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb31"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Compute individual and population attributable fractions</span></span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a>af_results <span class="ot">&lt;-</span> <span class="fu">compute_attributable_fractions</span>(</span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">bart_fit    =</span> bart_fit,</span>
+<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">analytic_df =</span> analytic_df,</span>
+<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">config      =</span> final_config</span>
+<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>We plot a histogram to examine the distribution of posterior mean of these individual attributable fractions. Values near zero indicate people whose predictors are close to the low-risk reference, while larger positive values indicate that more of their predicted likelihood of being an autism case is explained by their specific predictor profile rather than baseline covariates.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb32"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot posterior means of individual AFs</span></span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_individual_af</span>(af_results<span class="sc">$</span>af_summary_df,</span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a>                   <span class="at">save_path =</span> <span class="st">"outputs/individual_af_hist.png"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="study_1_files/figure-html/unnamed-chunk-17-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="population-attributable-fraction" class="level2">
+<h2 class="anchored" data-anchor-id="population-attributable-fraction">Population attributable fraction</h2>
+<p>While the individual attributable fraction measures how much of one person’s likelihood of being an autism case can be explained by their own predictors relative to a reference profile, the population attributable fraction (PAF) aggregates this idea across individuals to capture how much of the overall prevalence of autism in the study population could, in principle, be attributed to these predictors.</p>
+<p>Formally, the population attributable fraction is defined as <span class="math display">\[\mathrm{AF} =
+\frac{\Pr(Y=1) - \Pr(Y(x')=1)}{\Pr(Y=1)}.\]</span> The numerator measures the reduction in population risk that would occur if everyone’s predictors were set to the reference profile x’, while the denominator anchors this change to the observed population risk.</p>
+<p>In practice, we can estimate the PAF by taking the sample average of individual attributable fractions among autism cases, <span class="math display">\[\mathbb{E}_N\left[ \widehat{AF}(X,Z) \mid Y=1, S=1 \right] = \widehat{\mathrm{AF}} \approx \mathrm{AF}\]</span> which follows, perhaps unexpectedly, from a change-of-variables argument described in the Technical Appendix.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb33"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>af_results<span class="sc">$</span>paf_summary <span class="sc">|&gt;</span></span>
+<span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">mutate</span>(</span>
+<span id="cb33-3"><a href="#cb33-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">across</span>(<span class="fu">where</span>(is.numeric), <span class="sc">~</span><span class="fu">round</span>(.x, <span class="dv">3</span>))</span>
+<span id="cb33-4"><a href="#cb33-4" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb33-5"><a href="#cb33-5" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>(</span>
+<span id="cb33-6"><a href="#cb33-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">caption =</span> <span class="st">"Posterior mean and 95% credible interval for the population attributable fraction"</span>,</span>
+<span id="cb33-7"><a href="#cb33-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">col.names =</span> <span class="fu">c</span>(<span class="st">"Posterior Mean"</span>, <span class="st">"95% CI Lower"</span>, <span class="st">"95% CI Upper"</span>),</span>
+<span id="cb33-8"><a href="#cb33-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">align =</span> <span class="st">"ccc"</span>,</span>
+<span id="cb33-9"><a href="#cb33-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">booktabs =</span> <span class="cn">TRUE</span></span>
+<span id="cb33-10"><a href="#cb33-10" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb33-11"><a href="#cb33-11" aria-hidden="true" tabindex="-1"></a>  kableExtra<span class="sc">::</span><span class="fu">kable_styling</span>(</span>
+<span id="cb33-12"><a href="#cb33-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">full_width =</span> <span class="cn">FALSE</span>,</span>
+<span id="cb33-13"><a href="#cb33-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">position =</span> <span class="st">"center"</span>,</span>
+<span id="cb33-14"><a href="#cb33-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">bootstrap_options =</span> <span class="fu">c</span>(<span class="st">"striped"</span>, <span class="st">"hover"</span>)</span>
+<span id="cb33-15"><a href="#cb33-15" aria-hidden="true" tabindex="-1"></a>  )</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="tbl-paf" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-paf-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;1: Posterior mean and 95% credible interval for the population attributable fraction
+</figcaption>
+<div aria-describedby="tbl-paf-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="table table-striped table-hover do-not-create-environment cell caption-top table-sm small" data-quarto-postprocess="true">
+<caption>Posterior mean and 95% credible interval for the population attributable fraction</caption>
+<thead>
+<tr class="header">
+<th style="text-align: left;" data-quarto-table-cell-role="th"></th>
+<th style="text-align: center;" data-quarto-table-cell-role="th">Posterior Mean</th>
+<th style="text-align: center;" data-quarto-table-cell-role="th">95% CI Lower</th>
+<th style="text-align: center;" data-quarto-table-cell-role="th">95% CI Upper</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">2.5%</td>
+<td style="text-align: center;">0.9</td>
+<td style="text-align: center;">0.803</td>
+<td style="text-align: center;">0.962</td>
+</tr>
+</tbody>
+</table>
+
+
+</div>
+</div>
+</figure>
+</div>
+</div>
+</section>
+<section id="individual-shapley-decomposition" class="level2">
+<h2 class="anchored" data-anchor-id="individual-shapley-decomposition">Individual Shapley decomposition</h2>
+<p>To understand how individual predictors contribute to that the individual, we adapt the idea of Shapley values from cooperative game theory, an approach widely used in explainable AI. In this framework, the attributable fraction is expressed as an additive sum of contributions from each predictor, <span class="math display">\[AF(X, Z) = \phi_0(X,Z) + \phi_1(X, Z) + \phi_p(X,Z),\]</span> where <span class="math inline">\(\phi_0(X,Z)\)</span> is a baseline term and each <span class="math inline">\(\phi_j(X, Z)\)</span> represents the fair contribution of predictor <span class="math inline">\(j\)</span> to the individual’s attributable fraction.</p>
+<p>These contributions (called <em>Shapley values</em>) are computed by averaging how much each predictor in <span class="math inline">\(X\)</span> contributes to <span class="math inline">\(AF(X, Z)\)</span> when added to subsets of other predictors. These subsets are formed by randomly ordering the predictors and sequentially adding them, evaluating how the attributable fraction shifts at each step. Predictors not yet added are filled in with values drawn from random “donor” individuals, providing realistic replacements that reflect population variability. By averaging these incremental changes over many random orderings, we obtain a fair and order-independent decomposition of <span class="math inline">\(AF(X, Z)\)</span> into Shapley values.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb34"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>af_shapley <span class="ot">&lt;-</span> <span class="fu">compute_shapley_af</span>(</span>
+<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">bart_fit =</span> bart_fit,</span>
+<span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">analytic_df =</span> analytic_df,</span>
+<span id="cb34-4"><a href="#cb34-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">config =</span> final_config,</span>
+<span id="cb34-5"><a href="#cb34-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">ref_index =</span> af_results<span class="sc">$</span>ref_index,</span>
+<span id="cb34-6"><a href="#cb34-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_individuals =</span> <span class="dv">50</span>,</span>
+<span id="cb34-7"><a href="#cb34-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_samples =</span> <span class="dv">100</span>,</span>
+<span id="cb34-8"><a href="#cb34-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_donors =</span> <span class="dv">100</span></span>
+<span id="cb34-9"><a href="#cb34-9" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>The beeswarm plots visualize the Shapley values across individuals, showing how each predictor increases or decreases the attributable fraction for different people. Each point represents one person’s Shapley value for a given predictor, with color indicating the person’s predictor value. The horizontal spread reflects the variability in each predictor’s contribution—wider spreads signal predictors whose effects differ more across individuals. Positive Shapley values indicate predictors that increase a person’s attributable fraction (raising their estimated likelihood relative to the reference profile), while negative values indicate predictors that lower it.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb35"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>af_shapley_plot <span class="ot">&lt;-</span> <span class="fu">plot_shapley_beeswarm</span>(</span>
+<span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">af_shapley        =</span> af_shapley<span class="sc">$</span>individual,</span>
+<span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">analytic_df       =</span> analytic_df,</span>
+<span id="cb35-4"><a href="#cb35-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">predictor_stats_df =</span> predictor_stats_df,</span>
+<span id="cb35-5"><a href="#cb35-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">save_path         =</span> <span class="st">"outputs/shapley_beeswarm.png"</span>,</span>
+<span id="cb35-6"><a href="#cb35-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">save_path_vertical =</span> <span class="st">"outputs/shapley_beeswarm_vertical.png"</span></span>
+<span id="cb35-7"><a href="#cb35-7" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p><img src="outputs/shapley_beeswarm_vertical.png" class="img-fluid" style="width:80.0%"></p>
+</section>
+<section id="population-shapley-decomposition" class="level2">
+<h2 class="anchored" data-anchor-id="population-shapley-decomposition">Population Shapley decomposition</h2>
+<p>Just as the population attributable fraction is defined as the average of individual attributable fractions among autism cases, the population Shapley values are obtained by averaging individual Shapley contributions across those same cases. If <span class="math display">\[AF(X, Z) = \phi_0(X,Z) + \phi_1(X, Z) + \phi_p(X,Z),\]</span> then the population-level decomposition is <span class="math display">\[AF = \bar{\phi}_0 + \sum_j \bar{\phi}_j,\]</span> where each <span class="math inline">\(\bar{\phi}_j\)</span> is the average contribution of predictor <span class="math inline">\(j\)</span> across all cases. These averaged contributions represent how much each predictor explains, on average, of the total population attributable fraction.</p>
+<p>The table below reports the posterior mean and 95% credible intervals for each predictor’s population-level Shapley value, summarizing the overall importance of each factor in shaping the likelihood of autism across the population.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb36"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>af_shapley<span class="sc">$</span>population <span class="sc">|&gt;</span></span>
+<span id="cb36-2"><a href="#cb36-2" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">mutate</span>(</span>
+<span id="cb36-3"><a href="#cb36-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">mean_shapley =</span> <span class="fu">round</span>(mean_shapley, <span class="dv">3</span>),</span>
+<span id="cb36-4"><a href="#cb36-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">lower        =</span> <span class="fu">round</span>(lower, <span class="dv">3</span>),</span>
+<span id="cb36-5"><a href="#cb36-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">upper        =</span> <span class="fu">round</span>(upper, <span class="dv">3</span>)</span>
+<span id="cb36-6"><a href="#cb36-6" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb36-7"><a href="#cb36-7" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>(</span>
+<span id="cb36-8"><a href="#cb36-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">caption =</span> <span class="st">"Posterior mean and 95% credible interval for population-level Shapley values"</span>,</span>
+<span id="cb36-9"><a href="#cb36-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">col.names =</span> <span class="fu">c</span>(<span class="st">"Predictor"</span>, <span class="st">"Posterior Mean"</span>, <span class="st">"95% CI Lower"</span>, <span class="st">"95% CI Upper"</span>, <span class="st">"Cases Used"</span>),</span>
+<span id="cb36-10"><a href="#cb36-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">align =</span> <span class="st">"lcccc"</span>,</span>
+<span id="cb36-11"><a href="#cb36-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">booktabs =</span> <span class="cn">TRUE</span></span>
+<span id="cb36-12"><a href="#cb36-12" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb36-13"><a href="#cb36-13" aria-hidden="true" tabindex="-1"></a>  kableExtra<span class="sc">::</span><span class="fu">kable_styling</span>(</span>
+<span id="cb36-14"><a href="#cb36-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">full_width =</span> <span class="cn">FALSE</span>,</span>
+<span id="cb36-15"><a href="#cb36-15" aria-hidden="true" tabindex="-1"></a>    <span class="at">position =</span> <span class="st">"center"</span>,</span>
+<span id="cb36-16"><a href="#cb36-16" aria-hidden="true" tabindex="-1"></a>    <span class="at">bootstrap_options =</span> <span class="fu">c</span>(<span class="st">"striped"</span>, <span class="st">"hover"</span>)</span>
+<span id="cb36-17"><a href="#cb36-17" aria-hidden="true" tabindex="-1"></a>  )</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<table class="table table-striped table-hover caption-top table-sm small" data-quarto-postprocess="true">
+<caption>Posterior mean and 95% credible interval for population-level Shapley values</caption>
+<thead>
+<tr class="header">
+<th style="text-align: left;" data-quarto-table-cell-role="th">Predictor</th>
+<th style="text-align: center;" data-quarto-table-cell-role="th">Posterior Mean</th>
+<th style="text-align: center;" data-quarto-table-cell-role="th">95% CI Lower</th>
+<th style="text-align: center;" data-quarto-table-cell-role="th">95% CI Upper</th>
+<th style="text-align: center;" data-quarto-table-cell-role="th">Cases Used</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">sbp</td>
+<td style="text-align: center;">-0.002</td>
+<td style="text-align: center;">-0.015</td>
+<td style="text-align: center;">0.009</td>
+<td style="text-align: center;">13</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">smoker_current</td>
+<td style="text-align: center;">0.002</td>
+<td style="text-align: center;">-0.006</td>
+<td style="text-align: center;">0.013</td>
+<td style="text-align: center;">13</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">hdl_c</td>
+<td style="text-align: center;">0.014</td>
+<td style="text-align: center;">0.001</td>
+<td style="text-align: center;">0.032</td>
+<td style="text-align: center;">13</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">tot_chol</td>
+<td style="text-align: center;">0.014</td>
+<td style="text-align: center;">0.003</td>
+<td style="text-align: center;">0.031</td>
+<td style="text-align: center;">13</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">bp_treated</td>
+<td style="text-align: center;">0.046</td>
+<td style="text-align: center;">0.018</td>
+<td style="text-align: center;">0.087</td>
+<td style="text-align: center;">13</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">race</td>
+<td style="text-align: center;">0.033</td>
+<td style="text-align: center;">0.016</td>
+<td style="text-align: center;">0.060</td>
+<td style="text-align: center;">13</td>
+</tr>
+</tbody>
+</table>
+
+
+</div>
+</div>
+</section>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const onCopySuccess = function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  }
+  const getTextToCopy = function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+    text: getTextToCopy
+  });
+  clipboard.on('success', onCopySuccess);
+  if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+    // For code content inside modals, clipBoardJS needs to be initialized with a container option
+    // TODO: Check when it could be a function (https://github.com/zenorocha/clipboard.js/issues/860)
+    const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+      text: getTextToCopy,
+      container: window.document.getElementById('quarto-embedded-source-code-modal')
+    });
+    clipboardModal.on('success', onCopySuccess);
+  }
+    var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+    var mailtoRegex = new RegExp(/^mailto:/);
+      var filterRegex = new RegExp('/' + window.location.host + '/');
+    var isInternal = (href) => {
+        return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+    }
+    // Inspect non-navigation links and adorn them if external
+ 	var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+    for (var i=0; i<links.length; i++) {
+      const link = links[i];
+      if (!isInternal(link.href)) {
+        // undo the damage that might have been done by quarto-nav.js in the case of
+        // links that we want to consider external
+        if (link.dataset.originalHref !== undefined) {
+          link.href = link.dataset.originalHref;
+        }
+      }
+    }
+  function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+    const config = {
+      allowHTML: true,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start',
+    };
+    if (contentFn) {
+      config.content = contentFn;
+    }
+    if (onTriggerFn) {
+      config.onTrigger = onTriggerFn;
+    }
+    if (onUntriggerFn) {
+      config.onUntrigger = onUntriggerFn;
+    }
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      if (note) {
+        return note.innerHTML;
+      } else {
+        return "";
+      }
+    });
+  }
+  const xrefs = window.document.querySelectorAll('a.quarto-xref');
+  const processXRef = (id, note) => {
+    // Strip column container classes
+    const stripColumnClz = (el) => {
+      el.classList.remove("page-full", "page-columns");
+      if (el.children) {
+        for (const child of el.children) {
+          stripColumnClz(child);
+        }
+      }
+    }
+    stripColumnClz(note)
+    if (id === null || id.startsWith('sec-')) {
+      // Special case sections, only their first couple elements
+      const container = document.createElement("div");
+      if (note.children && note.children.length > 2) {
+        container.appendChild(note.children[0].cloneNode(true));
+        for (let i = 1; i < note.children.length; i++) {
+          const child = note.children[i];
+          if (child.tagName === "P" && child.innerText === "") {
+            continue;
+          } else {
+            container.appendChild(child.cloneNode(true));
+            break;
+          }
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(container);
+        }
+        return container.innerHTML
+      } else {
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        return note.innerHTML;
+      }
+    } else {
+      // Remove any anchor links if they are present
+      const anchorLink = note.querySelector('a.anchorjs-link');
+      if (anchorLink) {
+        anchorLink.remove();
+      }
+      if (window.Quarto?.typesetMath) {
+        window.Quarto.typesetMath(note);
+      }
+      // TODO in 1.5, we should make sure this works without a callout special case
+      if (note.classList.contains("callout")) {
+        return note.outerHTML;
+      } else {
+        return note.innerHTML;
+      }
+    }
+  }
+  for (var i=0; i<xrefs.length; i++) {
+    const xref = xrefs[i];
+    tippyHover(xref, undefined, function(instance) {
+      instance.disable();
+      let url = xref.getAttribute('href');
+      let hash = undefined; 
+      if (url.startsWith('#')) {
+        hash = url;
+      } else {
+        try { hash = new URL(url).hash; } catch {}
+      }
+      if (hash) {
+        const id = hash.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note !== null) {
+          try {
+            const html = processXRef(id, note.cloneNode(true));
+            instance.setContent(html);
+          } finally {
+            instance.enable();
+            instance.show();
+          }
+        } else {
+          // See if we can fetch this
+          fetch(url.split('#')[0])
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.getElementById(id);
+            if (note !== null) {
+              const html = processXRef(id, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      } else {
+        // See if we can fetch a full url (with no hash to target)
+        // This is a special case and we should probably do some content thinning / targeting
+        fetch(url)
+        .then(res => res.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const htmlDoc = parser.parseFromString(html, "text/html");
+          const note = htmlDoc.querySelector('main.content');
+          if (note !== null) {
+            // This should only happen for chapter cross references
+            // (since there is no id in the URL)
+            // remove the first header
+            if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+              note.children[0].remove();
+            }
+            const html = processXRef(null, note);
+            instance.setContent(html);
+          } 
+        }).finally(() => {
+          instance.enable();
+          instance.show();
+        });
+      }
+    }, function(instance) {
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            div.style.left = 0;
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+        // Handle positioning of the toggle
+    window.addEventListener(
+      "resize",
+      throttle(() => {
+        elRect = undefined;
+        if (selectedAnnoteEl) {
+          selectCodeLines(selectedAnnoteEl);
+        }
+      }, 10)
+    );
+    function throttle(fn, ms) {
+    let throttle = false;
+    let timer;
+      return (...args) => {
+        if(!throttle) { // first call gets through
+            fn.apply(this, args);
+            throttle = true;
+        } else { // all the others get throttled
+            if(timer) clearTimeout(timer); // cancel #2
+            timer = setTimeout(() => {
+              fn.apply(this, args);
+              timer = throttle = false;
+            }, ms);
+        }
+      };
+    }
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
