@@ -1,2 +1,2 @@
 # wadsi
-Autism Data Science Initiative at Wisconsin
+Wisconsin Autism Data Science Initiative
