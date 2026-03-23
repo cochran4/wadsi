@@ -1,21 +1,20 @@
 # imports.R
 
-# Load the custom functions
+# Source project functions
 source("R/prepare_data.R")
 source("R/compute_effects.R")
 source("R/model_diagnostics.R")
 source("R/plots.R")
 
-# Toggle: install missing packages automatically
+# Toggle automatic installation of missing packages
 INSTALL_MISSING <- TRUE
 
+# Required packages
 pkgs <- c(
-  "dplyr",
-  "ggplot2",
+  "tidyverse",
   "bartCause",
   "dbarts",
   "yaml",
-  "tidyverse",
   "mice",
   "coda",
   "knitr",
@@ -23,29 +22,31 @@ pkgs <- c(
   "flextable",
   "kableExtra",
   "patchwork",
-  "forcats",
   "iml",
-  "tibble",
-  "purrr",
   "ggbeeswarm"
-  )
+)
 
-# Pick a CRAN mirror if none set (avoids interactive prompt)
-if (isTRUE(INSTALL_MISSING) && (is.null(getOption("repos")) || getOption("repos")["CRAN"] == "@CRAN@")) {
-  options(repos = c(CRAN = "https://cloud.r-project.org"))
+# Set a CRAN mirror if needed
+if (isTRUE(INSTALL_MISSING)) {
+  repos <- getOption("repos")
+  if (is.null(repos) || identical(repos["CRAN"], "@CRAN@")) {
+    options(repos = c(CRAN = "https://cloud.r-project.org"))
+  }
 }
 
-# Install any missing packages (quietly)
-if (INSTALL_MISSING) {
+# Install missing packages
+if (isTRUE(INSTALL_MISSING)) {
   missing_pkgs <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
-  if (length(missing_pkgs)) {
+  if (length(missing_pkgs) > 0) {
     install.packages(missing_pkgs, dependencies = TRUE)
   }
 }
 
-# Load packages without startup chatter
+# Load packages quietly
 suppressPackageStartupMessages({
-  invisible(lapply(pkgs, library, character.only = TRUE))
+  for (pkg in pkgs) {
+    library(pkg, character.only = TRUE)
+  }
 })
 
 invisible(TRUE)

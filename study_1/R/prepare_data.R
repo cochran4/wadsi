@@ -35,62 +35,74 @@
 # -----------------------------------------------------------------------------
 
 coerce_variable_types <- function(raw_df, config) {
-  # Start with a copy of the raw data
-  coerced_df <- raw_df
-  
-  # Keep only variables listed in config
+
+  # Variables used in the analysis
   vars_to_keep <- c(
-    unlist(lapply(config$predictors, function(x) x$name)),
-    unlist(lapply(config$covariates, function(x) x$name)),
+    vapply(config$predictors, `[[`, character(1), "name"),
+    vapply(config$covariates, `[[`, character(1), "name"),
     config$outcome$name
   )
-  coerced_df <- coerced_df[, intersect(vars_to_keep, names(coerced_df)), drop = FALSE]
   
-  # Build a named vector mapping variable names to their intended types
+  # Subset data
+  coerced_df <- raw_df[, vars_to_keep, drop = FALSE]
+  
+  # Map variable names to types
   type_map <- c(
-    setNames(vapply(config$predictors, `[[`, character(1), "type"),
-             vapply(config$predictors, `[[`, character(1), "name")),
-    setNames(vapply(config$covariates, `[[`, character(1), "type"),
-             vapply(config$covariates, `[[`, character(1), "name")),
+    setNames(
+      vapply(config$predictors, `[[`, character(1), "type"),
+      vapply(config$predictors, `[[`, character(1), "name")
+    ),
+    setNames(
+      vapply(config$covariates, `[[`, character(1), "type"),
+      vapply(config$covariates, `[[`, character(1), "name")
+    ),
     setNames(config$outcome$type, config$outcome$name)
   )
   
-  # Coerce each variable to its specified type
+  # Coerce variables
   for (v in names(type_map)) {
-    if (!v %in% names(coerced_df)) next
     coerced_df[[v]] <- switch(
       type_map[[v]],
       continuous  = as.numeric(coerced_df[[v]]),
       categorical = as.factor(coerced_df[[v]]),
-      stop("Unsupported type: ", type_map[[v]])
+      stop("Unsupported type for ", v, ": ", type_map[[v]])
     )
   }
   
-  # Convert outcome to 0/1 if categorical
+  # Convert binary categorical outcome to 0/1
   if (config$outcome$type == "categorical") {
-    f <- relevel(factor(as.character(coerced_df[[config$outcome$name]])),
-                 ref = as.character(config$outcome$reference))
-    coerced_df[[config$outcome$name]] <- as.integer(f) - 1
+    outcome_name <- config$outcome$name
+    ref <- as.character(config$outcome$reference)
+    f <- relevel(factor(as.character(coerced_df[[outcome_name]])), ref = ref)
+    coerced_df[[outcome_name]] <- as.integer(f) - 1
   }
   
-  # Identify continuous predictors for summary stats
+  # Collect the continuous variable names
   continuous_predictors <- vapply(
     config$predictors,
-    function(x) if (x$type == "continuous") x$name else NA_character_,
+    function(x) x$name,
     character(1)
   )
-  continuous_predictors <- na.omit(continuous_predictors)
+  types <- vapply(
+    config$predictors,
+    function(x) x$type,
+    character(1)
+  )
+  continuous_predictors <- continuous_predictors[types == "continuous"]
   
   # Compute mean and SD for continuous predictors
-  predictor_stats <- lapply(continuous_predictors, function(var) {
-    vals <- coerced_df[[var]]
-    data.frame(
-      predictor = var,
-      mean = mean(vals, na.rm = TRUE),
-      sd   = sd(vals, na.rm = TRUE)
-    )
-  })
-  predictor_stats_df <- do.call(rbind, predictor_stats)
+  predictor_stats_df <- if (length(continuous_predictors) > 0) {
+    do.call(rbind, lapply(continuous_predictors, function(v) {
+      data.frame(
+        predictor = v,
+        mean = mean(coerced_df[[v]], na.rm = TRUE),
+        sd = sd(coerced_df[[v]], na.rm = TRUE)
+      )
+    }))
+  } else {
+    data.frame(predictor = character(), mean = numeric(), sd = numeric())
+  }
+  rownames(predictor_stats_df) <- NULL
   
   # Return processed data and predictor statistics
   list(
@@ -104,84 +116,86 @@ coerce_variable_types <- function(raw_df, config) {
 # add_missingness_indicators.R
 #
 # Description:
-#   This function handles missing data by:
-#     * Adding explicit "Missing" levels to categorical (factor) variables.
-#     * Creating binary missingness indicators (miss_<var>) for continuous variables.
-#   It also updates the configuration object to include new indicator variables
-#   for continuous features only (categorical variables are modified in place).
+#   This function handles missingness for selected variables listed in
+#   config$missingness_indicators.
+#
+#   For continuous variables, it:
+#     1. Creates a binary missingness indicator named miss_<var>
+#     2. Replaces missing values with 0
+#
+#   For categorical variables, it:
+#     1. Adds "Missing" as an explicit factor level
+#
+#   The configuration object is updated only for continuous variables,
+#   since their new missingness indicators must be included in downstream
+#   modeling.
 #
 # Inputs:
-#   - coerced_df: data.frame output from process_and_summarize()
-#   - config: configuration list containing:
-#       * predictors: list of variables with 'name' and 'type'
-#       * covariates: list of variables with 'name' and 'type'
-#       * missingness_indicators: character vector of variable names to process
+#   - coerced_df: data frame after type coercion
+#   - config: configuration list containing predictors, covariates, and
+#             missingness_indicators
 #
 # Output:
-#   - updated dataset with missingness indicators included
-#
-# Example:
-#   indicated_df <- add_missingness_indicators(result$coerced_df, config)
-#   summary(indicated_df)
+#   A list containing:
+#     * indicated_df: updated data frame
+#     * config: updated configuration
 #
 # -----------------------------------------------------------------------------
-
 add_missingness_indicators <- function(coerced_df, config) {
+
   # Copy input data
   indicated_df <- coerced_df
   
-  # Check that we have variables to process
+  # Nothing to do
   if (is.null(config$missingness_indicators) || length(config$missingness_indicators) == 0) {
     message("No missingness indicators specified in config.")
     return(list(
-      data = coerced_df,
-      config = config,
-      data_summary = summary(coerced_df)
+      indicated_df = indicated_df,
+      config = config
     ))
   }
   
-  # ---- Process each variable listed ----
+  # Process each selected variable
   for (var in config$missingness_indicators) {
-    if (!var %in% names(indicated_df)) {
-      warning(paste("Variable", var, "not found in dataset. Skipping."))
-      next
-    }
     
-    # Find its type from config
+    # Determine whether the variable is a predictor or covariate, and get its type
     var_type <- NULL
+    var_group <- NULL
+    
     for (group in c("predictors", "covariates")) {
-      match <- vapply(config[[group]], `[[`, character(1), "name") == var
-      if (any(match)) {
-        var_type <- config[[group]][[which(match)]]$type
+      var_names <- vapply(config[[group]], `[[`, character(1), "name")
+      match_idx <- which(var_names == var)
+      
+      if (length(match_idx) > 0) {
+        var_type <- config[[group]][[match_idx[1]]]$type
+        var_group <- group
         break
       }
     }
     
-    # Skip if type could not be determined
-    if (is.null(var_type)) {
-      warning(paste("Variable", var, "not found in predictors or covariates. Skipping."))
-      next
-    }
-    
-    # --- Continuous variable: create binary indicator + impute 0 ---
+    # Continuous variable: add indicator and replace missing values with 0
     if (var_type == "continuous") {
+      
+      # Create name for new missingness indicator
       miss_name <- paste0("miss_", var)
+      
+      # Add in missingness indicator
       indicated_df[[miss_name]] <- as.integer(is.na(indicated_df[[var]]))
       indicated_df[[var]][is.na(indicated_df[[var]])] <- 0
       
-      # Add to config under the same section
-      entry <- list(name = miss_name, type = "binary")
-      if (var %in% sapply(config$predictors, `[[`, "name")) {
-        config$predictors <- append(config$predictors, list(entry))
-      } else if (var %in% sapply(config$covariates, `[[`, "name")) {
-        config$covariates <- append(config$covariates, list(entry))
-      }
+      # Add indicator to the same section of the config
+      entry <- list(name = miss_name, type = "categorical")
+      config[[var_group]] <- append(config[[var_group]], list(entry))
       
-      # --- Categorical variable: add "Missing" level ---
+      # Categorical variable: add explicit Missing level
     } else if (var_type == "categorical") {
-      indicated_df[[var]] <- forcats::fct_na_value_to_level(indicated_df[[var]], level = "Missing")
+      indicated_df[[var]] <- forcats::fct_na_value_to_level(
+        indicated_df[[var]],
+        level = "Missing"
+      )
+      
     } else {
-      warning(paste("Unsupported variable type for", var))
+      warning("Unsupported variable type for ", var, ": ", var_type)
     }
   }
   
@@ -196,67 +210,52 @@ add_missingness_indicators <- function(coerced_df, config) {
 # impute_missing_data.R
 #
 # Description:
-#   This function performs single imputation of missing data using the `mice`
-#   package. It removes the outcome temporarily (so it is not imputed), converts
-#   any character variables to factors, performs imputation, and then re-adds
-#   the outcome to the completed dataset.
+#   Performs single imputation using the `mice` package. The outcome is removed
+#   before imputation and added back afterward, so only predictors and
+#   covariates are imputed.
 #
-#   The function is designed to be used after adding missingness indicators,
-#   so the dataset (`indicated_df`) should already have appropriate structure.
+#   Designed to be used after adding missingness indicators.
 #
 # Inputs:
-#   - indicated_df: data.frame output from add_missingness_indicators()
+#   - indicated_df: data frame after missingness handling
 #   - config: configuration list containing at least:
 #       * outcome: list with element 'name'
 #
 # Output:
-#   - imputed dataset with the outcome re-attached
+#   - imputed data frame with outcome reattached
 #
 # Notes:
-#   - Uses a single imputation (m = 1) for simplicity.
-#   - Set `print = FALSE` to silence MICE output if desired.
-#   - You can easily modify to return all m imputations if needed.
-#
-# Example:
-#   imputed_df <- impute_missing_data(indicated_df, config)
-#   summary(imputed_df)
+#   - Uses single imputation (m = 1).
+#   - Relies on `mice` default methods for each variable type.
 #
 # -----------------------------------------------------------------------------
 
 impute_missing_data <- function(indicated_df, config) {
-  # Ensure required package is available
-  if (!requireNamespace("mice", quietly = TRUE)) {
-    stop("The 'mice' package is required. Please install it with install.packages('mice').")
-  }
-  
+
   # Copy data
   imputed_df <- indicated_df
   
-  # ---- Temporarily remove outcome ----
+  # Grab outcome name
   outcome_name <- config$outcome$name
-  if (!outcome_name %in% names(imputed_df)) {
-    stop("Outcome variable not found in dataset.")
-  }
   
+  # Remove outcome before imputation
   outcome <- imputed_df[[outcome_name]]
   imputed_df[[outcome_name]] <- NULL
   
-  # ---- Convert character columns to factors ----
-  char_vars <- sapply(imputed_df, is.character)
-  if (any(char_vars)) {
-    imputed_df[char_vars] <- lapply(imputed_df[char_vars], factor)
+  # If nothing is missing, return early
+  if (!anyNA(imputed_df)) {
+    imputed_df[[outcome_name]] <- outcome
+    return(imputed_df)
   }
   
-  # ---- Perform imputation ----
-  # m = 1: single imputation
-  # printFlag controls whether mice progress output is shown
-  mice_result <- mice::mice(imputed_df, m = 1, printFlag = TRUE)
-  imputed_df <- mice::complete(mice_result)
+  # Perform single imputation
+  mice_result <- mice::mice(imputed_df, m = 1, printFlag = FALSE)
+  imputed_df <- mice::complete(mice_result, 1)
   
-  # ---- Add outcome back ----
+  # Re-attach outcome
   imputed_df[[outcome_name]] <- outcome
   
-  # ---- Return imputed data and summary ----
+  # Return imputed data
   imputed_df
 }
 
@@ -264,42 +263,40 @@ impute_missing_data <- function(indicated_df, config) {
 # finalize_analytic_dataset.R
 #
 # Description:
-#   This function prepares the final analytic dataset for modeling.
-#   It removes any rows with missing outcome values and updates the
-#   configuration object accordingly.
+#   Prepares the final analytic dataset by removing rows with missing outcome
+#   values.
 #
 # Inputs:
-#   - imputed_df: data.frame output from impute_missing_data()
+#   - imputed_df: data frame output from impute_missing_data()
 #   - config: configuration list containing at least:
-#       * outcome: list with 'name'
-#       * predictors: list of variables with 'name' and 'type'
-#       * covariates: list of variables with 'name' and 'type'
+#       * outcome: list with element 'name'
 #
 # Output:
-#   A list containing:
-#       * data: cleaned analytic dataset ready for modeling
-#       * config: updated configuration (categorical vars kept as factors)
-#       * data_summary: summary of the final dataset
+#   - analytic data frame with non-missing outcomes
 #
 # Example:
 #   analytic_df <- finalize_analytic_dataset(imputed_df, config)
 #   summary(analytic_df)
 #
 # -----------------------------------------------------------------------------
-
 finalize_analytic_dataset <- function(imputed_df, config) {
+
+  # Copy data
   analytic_df <- imputed_df
   
-  # ---- Drop rows with missing outcomes ----
+  # Drop rows with missing outcomes
   outcome_name <- config$outcome$name
   n_missing <- sum(is.na(analytic_df[[outcome_name]]))
   
+  # Print number of rows with missing outcome
   if (n_missing > 0) {
     analytic_df <- analytic_df[!is.na(analytic_df[[outcome_name]]), ]
-    cat(sprintf("Dropped %d row%s with missing outcome (%s).\n",
-                n_missing,
-                ifelse(n_missing == 1, "", "s"),
-                outcome_name))
+    cat(sprintf(
+      "Dropped %d row%s with missing outcome (%s).\n",
+      n_missing,
+      ifelse(n_missing == 1, "", "s"),
+      outcome_name
+    ))
   }
   
   # ---- Return final dataset and updated config ----

@@ -1,67 +1,82 @@
 # =============================================================================
-# compute_causal_likelihood_ratios.R
+# compute_causal_relative_risks.R
 #
 # Description:
-#   Unified function to estimate causal likelihood ratios (CLR)
-#   for both continuous and categorical predictors using posterior samples
-#   from a fitted BART model.
+#   Estimates individual and population causal relative risks using posterior
+#   predictions from a fitted BART model.
 #
 #   For each predictor:
-#     * Continuous: contrast +1 SD vs -1 SD (using pre-imputation stats)
-#     * Categorical: each non-reference category vs reference category
+#     * Continuous: compares +1 SD vs -1 SD, using pre-imputation summaries
+#     * Categorical: compares each non-reference level to a reference level
 #
-#   For each contrast:
-#     1. Construct counterfactual datasets with exposure set to x and x'
-#     2. Predict Pr(Y=1 | X, Z, S=1) using BART posterior draws
-#     3. Compute per-person odds ratios to approximate individual CLR
-#     4. Weight these by π(Z) to form a population CLR:
+#   For each contrast, the function:
+#     1. Constructs two counterfactual datasets with the predictor set to x and x'
+#     2. Predicts Pr(Y = 1 | X, Z, S = 1) under each scenario across posterior draws
+#     3. Forms a model-based odds ratio for each individual and draw
+#     4. Uses these individual contrasts, together with π(Z), to construct a
+#        population-level summary
 #
-#         π(Z) ∝ [ Pr(Y=1|Z,X=x',S=1)*Pr(Y=1)/Pr(Y=1|S=1) ] /
-#                 [ Σ_y Pr(Y=y|Z,X=x',S=1)*Pr(Y=y)/Pr(Y=y|S=1) ]
+#   The justification for using this odds ratio to approximate the causal
+#   relative risk, including the required assumptions, is given in the protocol.
 #
 # Inputs:
-#   bart_fit     : fitted dbarts::bart model
-#   analytic_df  : dataframe used to fit the model (after imputation)
-#   config       : configuration list with predictors, outcome, and population_priors
-#   predictor_stats_df : dataframe with pre-imputation mean/sd for continuous vars
+#   - bart_fit: fitted dbarts::bart model
+#   - analytic_df: analytic data set used for model fitting
+#   - config: configuration list containing predictors, outcome, and
+#             population_priors
+#   - predictor_stats_df: pre-imputation mean and SD for continuous predictors
 #
 # Output:
 #   A list containing:
-#     - clr_summary_df   : per-person posterior mean CLR for each contrast
-#     - weighted_summary : posterior mean and 95% CI for weighted CLR per contrast
+#     * irr_summary_df: per-person posterior mean individual relative risk
+#     * weighted_summary: posterior mean and 95% interval for the
+#                         population-level summary
 # =============================================================================
+compute_causal_relative_risks <- function(bart_fit, analytic_df, config, predictor_stats_df) {
 
-compute_causal_likelihood_ratios <- function(bart_fit, analytic_df, config, predictor_stats_df) {
-  
   # --- Setup ---------------------------------------------------------------
+  # Outcome variable and observed outcomes in the analytic sample
   outcome_var <- config$outcome$name
   y_vec <- analytic_df[[outcome_var]]
   
-  # Outcome probabilities in the sample and target population
+  # Outcome probabilities in the sample (S = 1) and in the target population
   pY1_S1 <- mean(y_vec == 1, na.rm = TRUE)
   pY0_S1 <- 1 - pY1_S1
   pY1 <- config$population_priors$pY1
   pY0 <- config$population_priors$pY0
   
-  # Convert latent probit predictions to probabilities safely
+  # Obtain predicted probabilities and clamp them away from 0 and 1
   get_probs <- function(fit, newdata, eps = 1e-6) {
     p <- predict(fit, newdata = newdata)
+    
+    # Assert that predictions are numeric, non-missing, and on the probability scale
+    if (!is.numeric(p)) {
+      stop("BART predictions are not numeric.")
+    }
+    if (any(is.na(p))) {
+      stop("BART predictions contain missing values.")
+    }
+    if (any(p < -1e-8 | p > 1 + 1e-8)) {
+      stop("BART predictions are not on the probability scale.")
+    }
     pmin(pmax(p, eps), 1 - eps)
   }
   
-  # Weight function π(Z)
+  # Compute π(Z), the weight used to move from the sampled data to the target population
   compute_weights <- function(p_ref) {
     num <- p_ref * pY1 / pY1_S1
     denom <- p_ref * pY1 / pY1_S1 + (1 - p_ref) * pY0 / pY0_S1
     num / denom
   }
   
-  # Setup IDs and predictor list
-  id_vec <- if ("person_id" %in% names(analytic_df)) analytic_df$person_id else seq_len(nrow(analytic_df))
+  # Use row index as a unique identifier for individuals
+  id_vec <- seq_len(nrow(analytic_df))
+  
+  # Predictor definitions from the configuration
   predictors <- config$predictors
   
-  # Initialize collectors
-  clr_summary_all <- list()
+  # Collect individual- and population-level summaries across predictors
+  irr_summary_all <- list()
   weighted_summary_all <- list()
   
   # --- Main loop ------------------------------------------------------------
@@ -70,64 +85,75 @@ compute_causal_likelihood_ratios <- function(bart_fit, analytic_df, config, pred
     type <- pred$type
     message("Processing predictor: ", var, " (", type, ")")
     
-    # ------------------------------------------------------------------------
-    # Each predictor can be continuous or categorical.
-    # We form two counterfactual datasets for each contrast:
-    #   - Continuous: set predictor to (mean + 1SD) and (mean - 1SD)
-    #   - Categorical: set predictor to each alternative level vs reference
-    # For each, we predict P(Y=1 | X, Z, S=1), convert to odds, and compute:
-    #     CLR = odds(x) / odds(x')
-    # These are then weighted by π(Z) to form marginal likelihood ratios.
-    # ------------------------------------------------------------------------
+    # For each predictor, define a contrast x versus x' and evaluate the
+    # fitted model under both settings, holding all other variables fixed.
+    # We then form a model-based odds ratio for each individual and posterior draw.
     
     if (type == "continuous") {
-      # --- Continuous variable ----------------------------------------------
-      stats_row <- predictor_stats_df[predictor_stats_df$predictor == var, ]
-      if (nrow(stats_row) == 0) next
-      mu <- stats_row$mean; sd <- stats_row$sd
-      if (is.na(mu) || is.na(sd) || sd == 0) next
+      # --- Continuous predictor ---------------------------------------------
       
-      # Define contrast: +1 SD vs -1 SD
+      # Retrieve the pre-imputation mean and standard deviation
+      stats_row <- predictor_stats_df[predictor_stats_df$predictor == var, ]
+      mu <- stats_row$mean
+      sd <- stats_row$sd
+      
+      # Define the contrast: one standard deviation above versus below the mean
       high <- mu + sd
       low  <- mu - sd
       contrast <- "+1SD vs -1SD"
       
-      # Create counterfactual datasets
-      x_high <- analytic_df; x_high[[var]] <- high
-      x_low  <- analytic_df; x_low[[var]]  <- low
+      # Create two counterfactual data sets that differ only in this predictor
+      x_high <- analytic_df
+      x_high[[var]] <- high
       
-      # Predict probabilities under both scenarios
+      x_low <- analytic_df
+      x_low[[var]] <- low
+      
+      # Predict Pr(Y = 1 | X, Z, S = 1) under each counterfactual setting
       p_high <- get_probs(bart_fit, x_high)
       p_low  <- get_probs(bart_fit, x_low)
       
-      # Compute odds and conditional likelihood ratio per draw
+      # Convert predicted probabilities to odds and form the model-based contrast
       odds_high <- p_high / (1 - p_high)
       odds_low  <- p_low  / (1 - p_low)
-      clr_sN <- odds_high / odds_low
+      irr_hat_draws <- odds_high / odds_low
       
-      # Weight by π(Z) derived from reference (low) condition
+      # Weight by π(Z), evaluated under the reference condition
       weights <- compute_weights(p_low)
-      weighted_clr <- rowSums(clr_sN * weights) / rowSums(weights)
+      weighted_irr <- rowSums(irr_hat_draws * weights) / rowSums(weights)
       
-      # Store per-person posterior means
-      clr_summary_all[[length(clr_summary_all) + 1]] <- data.frame(
-        id = id_vec, predictor = var, contrast = contrast,
-        clr_mean = colMeans(clr_sN)
+      # Store posterior mean individual relative risk for each person
+      irr_summary_all[[length(irr_summary_all) + 1]] <- data.frame(
+        id = id_vec,
+        predictor = var,
+        contrast = contrast,
+        posterior_mean_irr = colMeans(irr_hat_draws)
       )
       
-      # Store weighted population-level posterior summaries
+      # Store posterior summaries of the population-level contrast
       weighted_summary_all[[length(weighted_summary_all) + 1]] <- data.frame(
-        predictor = var, contrast = contrast,
-        posterior_mean = mean(weighted_clr),
-        ci_lower = quantile(weighted_clr, 0.025),
-        ci_upper = quantile(weighted_clr, 0.975)
+        predictor = var,
+        contrast = contrast,
+        posterior_mean = mean(weighted_irr),
+        ci_lower = as.numeric(stats::quantile(weighted_irr, 0.025)),
+        ci_upper = as.numeric(stats::quantile(weighted_irr, 0.975))
       )
       
     } else if (type == "categorical") {
       # --- Categorical variable ---------------------------------------------
+      
+      # Observed levels of the predictor
       vals <- factor(analytic_df[[var]])
       levs <- levels(vals)
       
+      # Choose the most common non-missing level as the reference, if possible
+      valid_levels <- setdiff(levs, c("Missing"))
+      ref <- if (length(valid_levels) > 0) {
+        names(sort(table(vals[vals %in% valid_levels]), decreasing = TRUE))[1]
+      } else {
+        names(sort(table(vals), decreasing = TRUE))[1]
+      }
+
       # Choose a reference level (skip Missing/Unknown/NA if possible)
       valid_levels <- setdiff(levs, c("Missing", "Unknown", "NA"))
       ref <- if (length(valid_levels) > 0) {
@@ -135,41 +161,48 @@ compute_causal_likelihood_ratios <- function(bart_fit, analytic_df, config, pred
       } else {
         names(sort(table(vals), decreasing = TRUE))[1]
       }
+
+      # Compare each non-reference level to the reference
       others <- setdiff(levs, ref)
       
       # Loop over contrasts (each non-reference category vs reference)
       for (alt in others) {
         contrast <- paste0(alt, " vs ", ref)
         
-        # Construct counterfactual datasets
-        x_ref <- analytic_df; x_ref[[var]] <- factor(ref, levels = levs)
-        x_alt <- analytic_df; x_alt[[var]] <- factor(alt, levels = levs)
-        
-        # Predict probabilities under both category assignments
+        # Construct counterfactual data sets that differ only in this predictor
+        x_ref <- analytic_df
+        x_ref[[var]] <- factor(ref, levels = levs)
+        x_alt <- analytic_df
+        x_alt[[var]] <- factor(alt, levels = levs)
+
+        # Predict Pr(Y = 1 | X, Z, S = 1) under each category assignment
         p_ref <- get_probs(bart_fit, x_ref)
         p_alt <- get_probs(bart_fit, x_alt)
         
-        # Compute odds and conditional likelihood ratio
+        # Convert predicted probabilities to odds and form the model-based contrast
         odds_ref <- p_ref / (1 - p_ref)
         odds_alt <- p_alt / (1 - p_alt)
-        clr_sN <- odds_alt / odds_ref
+        irr_hat_draws <- odds_alt / odds_ref
         
-        # Weight by π(Z) based on the reference condition
+        # Weight by π(x', Z), evaluated under the reference condition
         weights <- compute_weights(p_ref)
-        weighted_clr <- rowSums(clr_sN * weights) / rowSums(weights)
+        weighted_irr <- rowSums(irr_hat_draws * weights) / rowSums(weights)
         
-        # Store per-person posterior means
-        clr_summary_all[[length(clr_summary_all) + 1]] <- data.frame(
-          id = id_vec, predictor = var, contrast = contrast,
-          clr_mean = colMeans(clr_sN)
+        # Store posterior mean individual relative risk for each person
+        irr_summary_all[[length(irr_summary_all) + 1]] <- data.frame(
+          id = id_vec,
+          predictor = var,
+          contrast = contrast,
+          posterior_mean_irr = colMeans(irr_hat_draws)
         )
         
-        # Store weighted population-level summaries
+        # Store posterior summaries of the population-level contrast
         weighted_summary_all[[length(weighted_summary_all) + 1]] <- data.frame(
-          predictor = var, contrast = contrast,
-          posterior_mean = mean(weighted_clr),
-          ci_lower = quantile(weighted_clr, 0.025),
-          ci_upper = quantile(weighted_clr, 0.975)
+          predictor = var,
+          contrast = contrast,
+          posterior_mean = mean(weighted_irr),
+          ci_lower = as.numeric(stats::quantile(weighted_irr, 0.025)),
+          ci_upper = as.numeric(stats::quantile(weighted_irr, 0.975))
         )
       }
     }
@@ -177,7 +210,7 @@ compute_causal_likelihood_ratios <- function(bart_fit, analytic_df, config, pred
   
   # --- Combine and return ---------------------------------------------------
   list(
-    clr_summary_df = dplyr::bind_rows(clr_summary_all),
+    irr_summary_df = dplyr::bind_rows(irr_summary_all),
     weighted_summary = dplyr::bind_rows(weighted_summary_all)
   )
 }
@@ -267,6 +300,17 @@ compute_attributable_fractions <- function(bart_fit, analytic_df, config) {
   
   # --- Step 4: probabilities under reference predictors ---------------------
   p_ref <- get_probs(bart_fit, x_ref_df)  # S x N
+  
+  cat("\n--- Diagnostics ---\n")
+  cat("Range of predicted risks (observed):", range(p_obs_mean), "\n")
+  cat("Reference person's risk:",
+      round(p_obs_mean[ref_index], 6), "\n")
+  
+  p_ref_mean <- colMeans(p_ref)
+  cat("Range of predicted risks (reference):", range(p_ref_mean), "\n")
+  
+  cat("Mean ratio p_ref/p_obs:",
+      mean(p_ref_mean / p_obs_mean), "\n")
   
   # --- Step 5: individual AF per draw ---------------------------------------
   # AF_i^(m) = 1 - p_ref_i^(m) / p_obs_i^(m)

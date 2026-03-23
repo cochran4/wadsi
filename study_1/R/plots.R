@@ -1,111 +1,183 @@
 # -----------------------------------------------------------------------------
-# plot_conditional_clr.R
+# plot_individual_rr.R
 #
 # Description:
-#   Creates two horizontally aligned panels:
-#     Left  = Continuous predictors
-#     Right = Categorical predictors
+#   Creates two panels:
+#     Top/Left    = Continuous predictors
+#     Bottom/Right = Categorical predictors
 #
-#   Each dot = one person's posterior mean causal likelihood ratio (CLR).
-#   X-axis = log₂ CLR; dots are white-filled circles with colored outlines.
-#   Both panels share a similar look and scale, with titles above each.
+#   Each dot represents one person's posterior mean individual relative risk.
+#   The x-axis is shown on a log2 scale. Dots are white-filled circles with
+#   colored outlines, and violins summarize the distribution within each
+#   predictor-contrast pair.
 #
 # Inputs:
-#   clr_summary_df : data.frame with columns
-#       - id, predictor, contrast, clr_mean
+#   irr_summary_df : data.frame with columns
+#       - id, predictor, contrast, posterior_mean_irr
 #       - type (optional; inferred if missing)
-#   save_path      : optional path to save the plot (e.g. "outputs/CLR.png")
+#   save_path          : optional path to save the horizontal plot
+#   save_path_vertical : optional path to save the vertical plot
 #
 # Output:
-#   A ggplot patchwork object, optionally saved as PNG.
+#   A patchwork plot object, returned invisibly.
 # -----------------------------------------------------------------------------
-plot_conditional_clr <- function(clr_summary_df, save_path = NULL, save_path_vertical = NULL) {
+plot_individual_rr <- function(irr_summary_df, config, save_path = NULL, save_path_vertical = NULL) {
   
-  # --- Infer type if missing ---
-  clr_summary_df <- clr_summary_df %>%
-    mutate(
-      type = case_when(
-        grepl("1SD", contrast, ignore.case = TRUE) ~ "continuous",
-        TRUE ~ "categorical"
+  
+  # Extract human-readable predictor labels from config (if provided)
+  label_map <- if (!is.null(config$predictor_labels)) {
+    unlist(config$predictor_labels)
+  } else {
+    NULL
+  }
+  
+  # Build a lookup table for predictor type from config
+  predictor_type_df <- dplyr::bind_rows(config$predictors) %>%
+    dplyr::select(name, type) %>%
+    dplyr::rename(predictor = name)
+  
+  # Add predictor type to the plotting data
+  irr_summary_df <- irr_summary_df %>%
+    dplyr::left_join(predictor_type_df, by = "predictor")
+  
+  # Convert simple 0/1 labels to No/Yes for readability
+  clean_contrast <- function(x) {
+    x <- gsub("\\b1\\b", "Yes", x)
+    x <- gsub("\\b0\\b", "No", x)
+    x
+  }
+  
+  # Create display labels:
+  #   - Replace raw variable names with readable labels when available
+  #   - For continuous predictors, show only the variable name
+  #   - For categorical predictors, append the contrast
+  irr_summary_df <- irr_summary_df %>%
+    dplyr::mutate(
+      predictor_label = dplyr::if_else(
+        !is.null(label_map) & predictor %in% names(label_map),
+        unname(label_map[predictor]),
+        predictor
+      ),
+      contrast_clean = clean_contrast(contrast),
+      display_label = dplyr::case_when(
+        type == "continuous" ~ predictor_label,
+        TRUE ~ paste0(predictor_label, "\n", contrast_clean)
       )
-  )
+    )
 
-  # --- Colorblind-friendly Okabe–Ito palette ---
-  cbPalette <- c(
+  # --- Colorblind-friendly Okabe-Ito palette ---
+  cb_palette <- c(
     "#3B4CC0", "#E69F00", "#009E73", "#CC79A7",
     "#D55E00", "#56B4E9", "#F0E442", "#999999"
   )
   
   make_panel <- function(df) {
-    ggplot(df, aes(
-      x = clr_mean,
-      y = fct_rev(factor(paste(predictor, contrast, sep = ": "))),
-      fill = predictor
-    )) +
-      geom_vline(xintercept = 1, linetype = "dashed", color = "gray50") +
-      geom_violin(
-        aes(group = paste(predictor, contrast)),
-        fill = "gray90", color = "gray70",
-        width = 0.6, scale = "width", alpha = 0.6
+    ggplot2::ggplot(
+      df,
+      ggplot2::aes(
+        # X-axis: posterior mean individual relative risk (log scale applied below)
+        x = posterior_mean_irr,
+        
+        # Y-axis: cleaned display label (reversed for top-to-bottom ordering)
+        y = forcats::fct_rev(factor(display_label)),
+        
+        # Color grouping by readable predictor label
+        fill = predictor_label
+      )
+    ) +
+      
+      # Reference line at no effect (relative risk = 1)
+      ggplot2::geom_vline(xintercept = 1, linetype = "dashed", color = "gray50") +
+      
+      # Violin shows distribution of individual effects within each displayed contrast
+      ggplot2::geom_violin(
+        ggplot2::aes(group = display_label),
+        fill = "gray90",
+        color = "gray70",
+        width = 0.6,
+        scale = "width",
+        alpha = 0.6
       ) +
-      geom_point(
-        aes(fill = predictor),
+      
+      # Points show individual posterior means (jittered for visibility)
+      ggplot2::geom_point(
         shape = 21,
-        color = "white",  # white outline
+        color = "white",
         stroke = 0.2,
         size = 1.0,
-        alpha = 0.25,               # <-- half transparent points
-        position = position_jitter(width = 0.01, height = 0.17)
+        alpha = 0.25,
+        position = ggplot2::position_jitter(width = 0.01, height = 0.17)
       ) +
-      scale_x_continuous(
+      
+      # Log2 scale for interpretability (e.g., doubling/halving)
+      ggplot2::scale_x_continuous(
         trans = "log2",
-        breaks = c(0.25, 0.5, 0.67, 0.8, 1, 1.25, 1.5, 2, 4),
-        labels = c("0.25", "0.5", "0.67", "0.8", "1", "1.25", "1.5", "2", "4")
+        breaks = c(0.25, 0.5, 0.67, 1, 1.5, 2, 4),
+        labels = c("0.25", "0.5", "0.67", "1", "1.5", "2", "4")
       ) +
-      scale_fill_manual(values = cbPalette) +
-      labs(x = "Individual likelihood ratio", y = NULL) +
-      theme_minimal(base_size = 13) +
-      theme(
-        panel.grid.minor = element_blank(),
-        panel.grid.major.y = element_blank(),
-        axis.text.y = element_text(size = 10),
-        axis.title.x = element_text(face = "bold", size = 13),
+      
+      # Consistent color palette across predictors
+      ggplot2::scale_fill_manual(values = cb_palette) +
+      
+      # Axis labels
+      ggplot2::labs(x = "Individual relative risk", y = NULL) +
+      
+      # Minimal theme with emphasis on readability
+      
+      ggplot2::theme_minimal(base_size = 13) +
+      ggplot2::theme(
+        panel.grid.minor = ggplot2::element_blank(),
+        panel.grid.major.y = ggplot2::element_blank(),
+        
+        # Y-axis labels (predictor + contrast)
+        axis.text.y = ggplot2::element_text(size = 12, face = "bold"),
+        
+        # X-axis title
+        axis.title.x = ggplot2::element_text(face = "bold", size = 17),
+        
+        # X-axis tick labels
+        axis.text.x = ggplot2::element_text(size = 12),
+        
         legend.position = "none",
-        plot.margin = margin(10, 10, 10, 10)
+        plot.margin = ggplot2::margin(10, 10, 10, 10)
       )
   }
   
-  # --- Build panels ---
-  p_cont <- clr_summary_df %>%
-    filter(type == "continuous") %>%
+  # --- Build panels by predictor type ---
+  p_cont <- irr_summary_df %>%
+    dplyr::filter(type == "continuous") %>%
     make_panel()
   
-  p_cat <- clr_summary_df %>%
-    filter(type == "categorical") %>%
+  p_cat <- irr_summary_df %>%
+    dplyr::filter(type == "categorical") %>%
     make_panel()
   
-  # --- Apply bold tag theme to each subplot individually ---
+  # --- Add panel labels ---
   p_cont <- p_cont +
-    labs(tag = "A") +
-    theme(plot.tag = element_text(face = "bold", size = 16, family = "sans"))
+    ggplot2::labs(tag = "A") +
+    ggplot2::theme(
+      plot.tag = ggplot2::element_text(face = "bold", size = 16, family = "sans")
+    )
   
   p_cat <- p_cat +
-    labs(tag = "B") +
-    theme(plot.tag = element_text(face = "bold", size = 16, family = "sans"))
+    ggplot2::labs(tag = "B") +
+    ggplot2::theme(
+      plot.tag = ggplot2::element_text(face = "bold", size = 16, family = "sans")
+    )
   
   # --- Combine panels for different outputs ---
   
   # Horizontal layout (for saving)
-   plot_horizontal <- p_cont | p_cat
-   plot_horizontal <- plot_horizontal + plot_annotation()
+  plot_horizontal <- p_cont | p_cat
+  plot_horizontal <- plot_horizontal + plot_annotation()
   
-   # Vertical layout (for Quarto display)
-   plot_vertical <- p_cont / p_cat
-   plot_vertical <- plot_vertical + plot_annotation()
+  # Vertical layout (for Quarto display)
+  plot_vertical <- p_cont / p_cat
+  plot_vertical <- plot_vertical + plot_annotation()
     
   # --- Save ---
   if (!is.null(save_path)) {
-    ggsave(save_path, plot_horizontal, width = 13, height = 11, dpi = 600)
+    ggsave(save_path, plot_horizontal, width = 16, height = 11, dpi = 600)
   }
    
    # Save vertical version
@@ -275,7 +347,7 @@ plot_shapley_beeswarm <- function(af_shapley,
   
   # ---- Save ---------------------------------------------------------------
   if (!is.null(save_path))
-    ggplot2::ggsave(save_path, plot_horizontal, width = 13, height = 6.5, dpi = 600)
+    ggplot2::ggsave(save_path, plot_horizontal, width = 15, height = 6.5, dpi = 600)
   if (!is.null(save_path_vertical))
     ggplot2::ggsave(save_path_vertical, plot_vertical, width = 8, height = 11, dpi = 600)
   
