@@ -180,7 +180,10 @@ add_missingness_indicators <- function(coerced_df, config) {
       miss_name <- paste0("miss_", var)
       
       # Add in missingness indicator
-      indicated_df[[miss_name]] <- as.integer(is.na(indicated_df[[var]]))
+      indicated_df[[miss_name]] <- factor(
+        as.integer(is.na(indicated_df[[var]])),
+        levels = c(0, 1)
+      )
       indicated_df[[var]][is.na(indicated_df[[var]])] <- 0
       
       # Add indicator to the same section of the config

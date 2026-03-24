@@ -37,6 +37,7 @@ outcome:
 missingness_indicators:
   - bp_treated
   - smoker_current
+  - sbp
 
 # -------------------------------------------------------------------------
 # Population outcome probabilities

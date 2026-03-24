@@ -84,7 +84,7 @@ compute_causal_relative_risks <- function(bart_fit, analytic_df, config, predict
     var <- pred$name
     type <- pred$type
     message("Processing predictor: ", var, " (", type, ")")
-    
+
     # For each predictor, define a contrast x versus x' and evaluate the
     # fitted model under both settings, holding all other variables fixed.
     # We then form a model-based odds ratio for each individual and posterior draw.
@@ -148,14 +148,6 @@ compute_causal_relative_risks <- function(bart_fit, analytic_df, config, predict
       
       # Choose the most common non-missing level as the reference, if possible
       valid_levels <- setdiff(levs, c("Missing"))
-      ref <- if (length(valid_levels) > 0) {
-        names(sort(table(vals[vals %in% valid_levels]), decreasing = TRUE))[1]
-      } else {
-        names(sort(table(vals), decreasing = TRUE))[1]
-      }
-
-      # Choose a reference level (skip Missing/Unknown/NA if possible)
-      valid_levels <- setdiff(levs, c("Missing", "Unknown", "NA"))
       ref <- if (length(valid_levels) > 0) {
         names(sort(table(vals[vals %in% valid_levels]), decreasing = TRUE))[1]
       } else {
