@@ -36,8 +36,6 @@ outcome:
 # For each variable listed, create a binary indicator for missing values
 missingness_indicators:
   - bp_treated
-  - smoker_current
-  - sbp
 
 # -------------------------------------------------------------------------
 # Population outcome probabilities
@@ -51,9 +49,9 @@ population_priors:
 
 # Display labels used in plots and tables
 predictor_labels:
-  sbp: "Systolic blood pressure"
+  sbp: "Systolic blood pressure, mmHg"
   smoker_current: "Current smoking"
-  hdl_c: "HDL cholesterol"
-  tot_chol: "Total cholesterol"
+  hdl_c: "HDL cholesterol, mg/dL"
+  tot_chol: "Total cholesterol, mg/dL"
   bp_treated: "Blood pressure medication"
   race: "Race"

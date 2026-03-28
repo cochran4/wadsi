@@ -253,8 +253,8 @@ y_train <- analytic_df[[outcome_var]]
 
 # Numerical parameters for bart
 nchain = 4L
-nskip  = 4000L
-ndpost = 4000L
+nskip  = 50000L
+ndpost = 6000L
 
 # Fit BART model for Pr(Y = 1 | X, Z, S = 1)
 # - keeptrees = TRUE allows reuse for posterior predictions
@@ -267,8 +267,7 @@ bart_fit <- dbarts::bart(
   verbose   = FALSE,
   nchain    = nchain,
   nskip     = nskip,
-  ndpost    = ndpost,
-  k = 2
+  ndpost    = ndpost
 )
 ```
 
@@ -342,6 +341,7 @@ These contrasts produce a posterior distribution of individual relative risks fo
 plot_individual_rr(
   irr_results$irr_summary_df,
   final_config,
+  predictor_stats_df,
   save_path = "outputs/individual_rr.png",
   save_path_vertical = "outputs/individual_rr_vertical.png"
 )
@@ -382,28 +382,77 @@ label_map <- if (!is.null(final_config$predictor_labels)) {
   NULL
 }
 
-# Convert simple 0/1 labels to No/Yes for readability
-clean_contrast <- function(x) {
-  x <- gsub("\\b1\\b", "Yes", x)
-  x <- gsub("\\b0\\b", "No", x)
+# Build predictor type lookup from config
+predictor_type_df <- dplyr::bind_rows(final_config$predictors) %>%
+  dplyr::select(name, type) %>%
+  dplyr::rename(predictor_raw = name)
+
+# Identify truly binary categorical predictors
+binary_predictors <- irr_results$weighted_summary %>%
+  dplyr::left_join(predictor_type_df, by = c("predictor" = "predictor_raw")) %>%
+  dplyr::filter(type == "categorical") %>%
+  dplyr::mutate(
+    contrast_trim = trimws(as.character(contrast))
+  ) %>%
+  dplyr::group_by(predictor) %>%
+  dplyr::summarise(
+    is_binary =
+      all(grepl("\\b[01]\\b", contrast_trim)) &&
+      !any(grepl("\\b[2-9]\\b", contrast_trim)),
+    .groups = "drop"
+  )
+
+# Clean categorical contrasts
+clean_categorical_contrast <- function(x, is_binary) {
+  x <- trimws(as.character(x))
+  if (is_binary) {
+    x <- gsub("\\b1\\b", "Yes", x)
+    x <- gsub("\\b0\\b", "No", x)
+  }
   x
 }
 
+# Clean continuous contrasts using mean +/- SD from predictor_stats_df
+clean_continuous_contrast <- function(contrast, mean = NA_real_, sd = NA_real_) {
+  if (!is.na(mean) && !is.na(sd)) {
+    low  <- round(mean - sd)
+    high <- round(mean + sd)
+    return(paste0(high, " vs ", low))
+  }
+  as.character(contrast)
+}
+
 irr_results$weighted_summary |>
+  dplyr::left_join(
+    predictor_type_df,
+    by = c("predictor" = "predictor_raw")
+  ) |>
+  dplyr::left_join(
+    predictor_stats_df |> dplyr::select(predictor, mean, sd),
+    by = "predictor"
+  ) |>
+  dplyr::left_join(
+    binary_predictors,
+    by = "predictor"
+  ) |>
+  dplyr::rowwise() |>
   dplyr::mutate(
+    is_binary = dplyr::coalesce(is_binary, FALSE),
     predictor = dplyr::if_else(
       !is.null(label_map) & predictor %in% names(label_map),
       unname(label_map[predictor]),
       predictor
     ),
     contrast = dplyr::case_when(
-      grepl("1SD", contrast, ignore.case = TRUE) ~ "+1 SD vs -1 SD",
-      TRUE ~ clean_contrast(contrast)
+      type == "continuous" ~ clean_continuous_contrast(contrast, mean, sd),
+      TRUE ~ clean_categorical_contrast(contrast, is_binary)
     ),
     posterior_mean = round(posterior_mean, 2),
     ci_lower = round(ci_lower, 2),
     ci_upper = round(ci_upper, 2)
   ) |>
+  dplyr::ungroup() |>
+  dplyr::select(predictor, contrast, posterior_mean, ci_lower, ci_upper) |>
   kable(
     caption = "Posterior mean and 95% credible interval for population relative risks",
     col.names = c("Predictor", "Contrast", "Posterior Mean", "95% CI Lower", "95% CI Upper"),

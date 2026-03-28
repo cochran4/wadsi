@@ -21,8 +21,11 @@
 # Output:
 #   A patchwork plot object, returned invisibly.
 # -----------------------------------------------------------------------------
-plot_individual_rr <- function(irr_summary_df, config, save_path = NULL, save_path_vertical = NULL) {
-  
+plot_individual_rr <- function(irr_summary_df,
+                               config,
+                               predictor_stats_df = NULL,
+                               save_path = NULL,
+                               save_path_vertical = NULL) {
   
   # Extract human-readable predictor labels from config (if provided)
   label_map <- if (!is.null(config$predictor_labels)) {
@@ -36,164 +39,273 @@ plot_individual_rr <- function(irr_summary_df, config, save_path = NULL, save_pa
     dplyr::select(name, type) %>%
     dplyr::rename(predictor = name)
   
-  # Add predictor type to the plotting data
+  # Add predictor type
   irr_summary_df <- irr_summary_df %>%
     dplyr::left_join(predictor_type_df, by = "predictor")
   
-  # Convert simple 0/1 labels to No/Yes for readability
-  clean_contrast <- function(x) {
-    x <- gsub("\\b1\\b", "Yes", x)
-    x <- gsub("\\b0\\b", "No", x)
-    x
+  # Add predictor mean/sd for continuous predictors, if supplied
+  if (!is.null(predictor_stats_df)) {
+    irr_summary_df <- irr_summary_df %>%
+      dplyr::left_join(
+        predictor_stats_df %>%
+          dplyr::select(predictor, mean, sd),
+        by = "predictor"
+      )
+  } else {
+    irr_summary_df <- irr_summary_df %>%
+      dplyr::mutate(mean = NA_real_, sd = NA_real_)
   }
   
-  # Create display labels:
-  #   - Replace raw variable names with readable labels when available
-  #   - For continuous predictors, show only the variable name
-  #   - For categorical predictors, append the contrast
-  irr_summary_df <- irr_summary_df %>%
+  # --- Identify truly binary categorical predictors ---
+  # A predictor is treated as binary if its contrast labels contain only 0/1
+  # values and do not contain any larger category labels like 2 or 3.
+  binary_predictors <- irr_summary_df %>%
+    dplyr::filter(type == "categorical") %>%
     dplyr::mutate(
+      contrast_trim = trimws(as.character(contrast))
+    ) %>%
+    dplyr::group_by(predictor) %>%
+    dplyr::summarise(
+      is_binary =
+        all(grepl("\\b[01]\\b", contrast_trim)) &&
+        !any(grepl("\\b[2-9]\\b", contrast_trim)),
+      .groups = "drop"
+    )
+  
+  
+    # --- Attach binary indicator back to main data ---
+    irr_summary_df <- irr_summary_df %>%
+    dplyr::left_join(binary_predictors, by = "predictor") %>%  # add is_binary flag
+    
+    # Replace NA (non-categorical predictors) with FALSE
+    # so downstream logic does not accidentally treat them as binary
+    dplyr::mutate(is_binary = dplyr::coalesce(is_binary, FALSE))
+  
+  # --- Clean contrast labels for categorical predictors ---
+  # For binary predictors only, convert 0/1 labels to No/Yes.
+  # For all other categorical predictors, leave the label unchanged.
+    clean_categorical_contrast <- function(x, is_binary) {
+      x <- trimws(as.character(x))
+      if (is_binary) {
+        x <- gsub("\\b1\\b", "Yes", x)
+        x <- gsub("\\b0\\b", "No", x)
+      }
+      x
+    }
+  
+  
+  # --- Clean contrast labels for continuous predictors ---
+  # When predictor means and SDs are available, replace generic labels
+  # like "-1 SD vs +1 SD" with the corresponding numeric values.
+  clean_continuous_contrast <- function(contrast, mean = NA_real_, sd = NA_real_) {
+    
+    # If mean and SD are available, show the implied low/high values
+    if (!is.na(mean) && !is.na(sd)) {
+      low  <- round(mean - sd)
+      high <- round(mean + sd)
+      return(paste0(high, " vs ", low))
+    }
+    
+    # Otherwise fall back to the original contrast label
+    as.character(contrast)
+  }
+  
+  # --- Build display labels for plotting ---
+  # Create readable predictor and contrast labels for the y-axis
+  irr_summary_df <- irr_summary_df %>%
+    dplyr::rowwise() %>%  # operate row-by-row (needed for custom label functions)
+    dplyr::mutate(
+      
+      # Replace raw predictor names with human-readable labels (if provided)
       predictor_label = dplyr::if_else(
-        !is.null(label_map) & predictor %in% names(label_map),
+        !is.null(label_map) && predictor %in% names(label_map),
         unname(label_map[predictor]),
         predictor
       ),
-      contrast_clean = clean_contrast(contrast),
-      display_label = dplyr::case_when(
-        type == "continuous" ~ predictor_label,
-        TRUE ~ paste0(predictor_label, "\n", contrast_clean)
-      )
-    )
-
-  # --- Colorblind-friendly Okabe-Ito palette ---
+      
+      # Wrap long predictor names to avoid overly wide labels
+      predictor_label = stringr::str_wrap(predictor_label, width = 20),
+      
+      # Clean contrast labels:
+      #   - continuous: use mean ± SD (or fallback)
+      #   - categorical: clean 0/1 → No/Yes only when appropriate
+      contrast_clean = dplyr::case_when(
+        type == "continuous" ~ clean_continuous_contrast(contrast, mean, sd),
+        TRUE ~ clean_categorical_contrast(contrast, is_binary)
+      ),
+      
+      # Wrap contrast labels for readability
+      contrast_clean = stringr::str_wrap(contrast_clean, width = 18),
+      
+      # Combine predictor and contrast into a single multi-line label
+      display_label = paste0(predictor_label, "\n", contrast_clean)
+    ) %>%
+    dplyr::ungroup()  # return to standard (non-rowwise) behavior
+  
+  
+  # --- Color palette (Okabe-Ito; colorblind-friendly) ---
+  # Ensures consistent coloring across predictors
   cb_palette <- c(
     "#3B4CC0", "#E69F00", "#009E73", "#CC79A7",
     "#D55E00", "#56B4E9", "#F0E442", "#999999"
   )
+  # --- Define a common x-axis for both panels ---
+  # Compute the overall range of individual relative risks across all predictors
+  x_range <- range(irr_summary_df$posterior_mean_irr, na.rm = TRUE)
   
-  make_panel <- function(df) {
+  # Add a small padding so points/violins do not sit on the plot boundaries
+  pad_factor <- 0.05
+  x_limits <- c(
+    x_range[1] / (1 + pad_factor),  # slightly below minimum
+    x_range[2] * (1 + pad_factor)   # slightly above maximum
+  )
+  
+  # --- Define interpretable tick marks on log2 scale ---
+  # These correspond to halving/doubling and common intermediate values
+  x_breaks <- c(0.25, 0.5, 0.67, 1, 1.5, 2, 4)
+  
+  # Keep only breaks that fall within the computed limits
+  # (ensures consistent but not cluttered axes across panels)
+  x_breaks <- x_breaks[
+    x_breaks >= x_limits[1] & x_breaks <= x_limits[2]
+  ]
+  
+  make_panel <- function(df, panel_tag = NULL, title = NULL) {
+    
+    # --- Base plot: map data to aesthetics ---
     ggplot2::ggplot(
       df,
       ggplot2::aes(
-        # X-axis: posterior mean individual relative risk (log scale applied below)
-        x = posterior_mean_irr,
-        
-        # Y-axis: cleaned display label (reversed for top-to-bottom ordering)
-        y = forcats::fct_rev(factor(display_label)),
-        
-        # Color grouping by readable predictor label
-        fill = predictor_label
+        x = posterior_mean_irr,                          # x-axis: individual relative risk
+        y = forcats::fct_rev(factor(display_label)),     # y-axis: predictor + contrast (top-to-bottom)
+        fill = predictor_label                           # fill used for grouping (not shown in legend)
       )
     ) +
       
-      # Reference line at no effect (relative risk = 1)
-      ggplot2::geom_vline(xintercept = 1, linetype = "dashed", color = "gray50") +
+      # --- Reference line (no effect) ---
+      ggplot2::geom_vline(
+        xintercept = 1,
+        linetype = "dashed",
+        color = "gray50",
+        linewidth = 0.6
+      ) +
       
-      # Violin shows distribution of individual effects within each displayed contrast
+      # --- Distribution layer (violin) ---
+      # Shows spread of individual relative risks within each predictor/contrast
       ggplot2::geom_violin(
         ggplot2::aes(group = display_label),
         fill = "gray90",
         color = "gray70",
-        width = 0.6,
+        width = 0.7,
         scale = "width",
-        alpha = 0.6
+        alpha = 0.7
       ) +
       
-      # Points show individual posterior means (jittered for visibility)
+      # --- Individual estimates (points) ---
+      # Each dot is one person's posterior mean IRR
       ggplot2::geom_point(
         shape = 21,
         color = "white",
-        stroke = 0.2,
-        size = 1.0,
-        alpha = 0.25,
+        stroke = 0.25,
+        size = 1.4,
+        alpha = 0.30,
         position = ggplot2::position_jitter(width = 0.01, height = 0.17)
       ) +
       
-      # Log2 scale for interpretability (e.g., doubling/halving)
+      # --- X-axis scaling (log2) ---
+      # Allows interpretation in terms of doubling / halving
       ggplot2::scale_x_continuous(
         trans = "log2",
-        breaks = c(0.25, 0.5, 0.67, 1, 1.5, 2, 4),
-        labels = c("0.25", "0.5", "0.67", "1", "1.5", "2", "4")
+        limits = x_limits,
+        breaks = x_breaks,
+        labels = scales::label_number()
       ) +
       
-      # Consistent color palette across predictors
+      # --- Color palette ---
       ggplot2::scale_fill_manual(values = cb_palette) +
       
-      # Axis labels
-      ggplot2::labs(x = "Individual relative risk", y = NULL) +
+      # --- Labels and titles ---
+      ggplot2::labs(
+        x = "Individual relative risk",
+        y = NULL,
+        title = title
+      ) +
       
-      # Minimal theme with emphasis on readability
-      
-      ggplot2::theme_minimal(base_size = 13) +
+      # --- Theme and styling ---
+      ggplot2::theme_minimal(base_size = 20) +
       ggplot2::theme(
         panel.grid.minor = ggplot2::element_blank(),
         panel.grid.major.y = ggplot2::element_blank(),
         
-        # Y-axis labels (predictor + contrast)
-        axis.text.y = ggplot2::element_text(size = 12, face = "bold"),
+        # Axis text
+        axis.text.y = ggplot2::element_text(size = 18, face = "bold"),
+        axis.text.x = ggplot2::element_text(size = 18),
         
-        # X-axis title
-        axis.title.x = ggplot2::element_text(face = "bold", size = 17),
+        # Axis title
+        axis.title.x = ggplot2::element_text(face = "bold", size = 19),
         
-        # X-axis tick labels
-        axis.text.x = ggplot2::element_text(size = 12),
+        # Panel title (Continuous / Categorical)
+        plot.title = ggplot2::element_text(face = "bold", size = 22, hjust = 0.5),
         
         legend.position = "none",
-        plot.margin = ggplot2::margin(10, 10, 10, 10)
+        plot.margin = ggplot2::margin(12, 12, 12, 12)
       )
   }
   
   # --- Build panels by predictor type ---
+  
+  # Continuous predictors panel
   p_cont <- irr_summary_df %>%
     dplyr::filter(type == "continuous") %>%
-    make_panel()
-  
+    make_panel(title = "Continuous predictors")
+
+  # Categorical predictors panel
   p_cat <- irr_summary_df %>%
     dplyr::filter(type == "categorical") %>%
-    make_panel()
+    make_panel(title = "Categorical predictors")
   
-  # --- Add panel labels ---
-  p_cont <- p_cont +
-    ggplot2::labs(tag = "A") +
-    ggplot2::theme(
-      plot.tag = ggplot2::element_text(face = "bold", size = 16, family = "sans")
-    )
+  # --- Combine panels into final layouts ---
   
-  p_cat <- p_cat +
-    ggplot2::labs(tag = "B") +
-    ggplot2::theme(
-      plot.tag = ggplot2::element_text(face = "bold", size = 16, family = "sans")
-    )
+  # Horizontal layout (side-by-side; useful for manuscripts)
+  #plot_horizontal <- p_cont | p_cat
+  plot_horizontal <- (p_cont | p_cat) 
+  #+
+  #  patchwork::plot_annotation(tag_levels = "A") &
+  #  ggplot2::theme(
+  #    plot.tag = ggplot2::element_text(face = "bold", size = 18),
+  #    plot.tag.position = c(0, 1)
+  #  )
   
-  # --- Combine panels for different outputs ---
-  
-  # Horizontal layout (for saving)
-  plot_horizontal <- p_cont | p_cat
-  plot_horizontal <- plot_horizontal + plot_annotation()
-  
-  # Vertical layout (for Quarto display)
+  # Vertical layout (stacked; useful for presentations / Quarto)
   plot_vertical <- p_cont / p_cat
-  plot_vertical <- plot_vertical + plot_annotation()
-    
-  # --- Save ---
+  
+  
+  # --- Save outputs if paths are provided ---
+  
+  # Save horizontal version
   if (!is.null(save_path)) {
-    ggsave(save_path, plot_horizontal, width = 16, height = 11, dpi = 600)
+    ggplot2::ggsave(
+      save_path,
+      plot_horizontal,
+      width = 24,
+      height = 12,
+      dpi = 600
+    )
   }
-   
-   # Save vertical version
-   if (!is.null(save_path_vertical)) {
-     ggplot2::ggsave(
-       filename = save_path_vertical,
-       plot     = plot_vertical,
-       width    = 8,
-       height   = 16,
-       dpi      = 600
-     )
-   }
-   
-   # Return vertical for interactive use
-   invisible(plot_vertical)
-
+  
+  # Save vertical version
+  if (!is.null(save_path_vertical)) {
+    ggplot2::ggsave(
+      save_path_vertical,
+      plot_vertical,
+      width = 12,
+      height = 18,
+      dpi = 600
+    )
+  }
+  
+  # --- Return vertical plot for interactive use ---
+  invisible(plot_vertical)
 }
 
 
