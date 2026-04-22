@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+ <title>Wisconsin Autism Data Science Initiative</title>
+ <link href="http://localhost:4000/wadsi/atom.xml" rel="self"/>
+ <link href="http://localhost:4000/wadsi/"/>
+ <updated>2026-04-22T15:13:17-06:00</updated>
+ <id>http://localhost:4000</id>
+ <author>
+   <name></name>
+   <email></email>
+ </author>
+
+ 
+ <entry>
+   <title>More info coming soon!</title>
+   <link href="http://localhost:4000/2026/04/22/coming-soon/"/>
+   <updated>2026-04-22T00:00:00-06:00</updated>
+   <id>http://localhost:4000/wadsi/2026/04/22/coming-soon</id>
+   <content type="html">
+</content>
+ </entry>
+ 
+
+</feed>
