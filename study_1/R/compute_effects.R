@@ -6,7 +6,7 @@
 #   predictions from a fitted BART model.
 #
 #   For each predictor:
-#     * Continuous: compares +1 SD vs -1 SD, using pre-imputation summaries
+#     * Continuous: compares 90th vs. 10th percentiles, using pre-imputation summaries
 #     * Categorical: compares each non-reference level to a reference level
 #
 #   For each contrast, the function:
@@ -48,17 +48,6 @@ compute_causal_relative_risks <- function(bart_fit, analytic_df, config, predict
   # Obtain predicted probabilities and clamp them away from 0 and 1
   get_probs <- function(fit, newdata, eps = 1e-6) {
     p <- predict(fit, newdata = newdata)
-    
-    # Assert that predictions are numeric, non-missing, and on the probability scale
-    if (!is.numeric(p)) {
-      stop("BART predictions are not numeric.")
-    }
-    if (any(is.na(p))) {
-      stop("BART predictions contain missing values.")
-    }
-    if (any(p < -1e-8 | p > 1 + 1e-8)) {
-      stop("BART predictions are not on the probability scale.")
-    }
     pmin(pmax(p, eps), 1 - eps)
   }
   
@@ -94,13 +83,11 @@ compute_causal_relative_risks <- function(bart_fit, analytic_df, config, predict
       
       # Retrieve the pre-imputation mean and standard deviation
       stats_row <- predictor_stats_df[predictor_stats_df$predictor == var, ]
-      mu <- stats_row$mean
-      sd <- stats_row$sd
       
-      # Define the contrast: one standard deviation above versus below the mean
-      high <- mu + sd
-      low  <- mu - sd
-      contrast <- "+1SD vs -1SD"
+      # Define the contrast: 90th vs. 10th percentile
+      high <- stats_row$q90
+      low  <- stats_row$q10
+      contrast <- "90th vs. 10th percentile"
       
       # Create two counterfactual data sets that differ only in this predictor
       x_high <- analytic_df
@@ -127,7 +114,8 @@ compute_causal_relative_risks <- function(bart_fit, analytic_df, config, predict
         id = id_vec,
         predictor = var,
         contrast = contrast,
-        posterior_mean_irr = colMeans(irr_hat_draws)
+        posterior_mean_irr = colMeans(irr_hat_draws),
+        posterior_median_irr = apply(irr_hat_draws, 2, median)
       )
       
       # Store posterior summaries of the population-level contrast
@@ -135,6 +123,7 @@ compute_causal_relative_risks <- function(bart_fit, analytic_df, config, predict
         predictor = var,
         contrast = contrast,
         posterior_mean = mean(weighted_irr),
+        posterior_median = median(weighted_irr),
         ci_lower = as.numeric(stats::quantile(weighted_irr, 0.025)),
         ci_upper = as.numeric(stats::quantile(weighted_irr, 0.975))
       )
@@ -185,7 +174,8 @@ compute_causal_relative_risks <- function(bart_fit, analytic_df, config, predict
           id = id_vec,
           predictor = var,
           contrast = contrast,
-          posterior_mean_irr = colMeans(irr_hat_draws)
+          posterior_mean_irr = colMeans(irr_hat_draws),
+          posterior_median_irr = apply(irr_hat_draws, 2, median)
         )
         
         # Store posterior summaries of the population-level contrast
@@ -193,6 +183,7 @@ compute_causal_relative_risks <- function(bart_fit, analytic_df, config, predict
           predictor = var,
           contrast = contrast,
           posterior_mean = mean(weighted_irr),
+          posterior_median = median(weighted_irr),
           ci_lower = as.numeric(stats::quantile(weighted_irr, 0.025)),
           ci_upper = as.numeric(stats::quantile(weighted_irr, 0.975))
         )
@@ -213,23 +204,28 @@ compute_causal_relative_risks <- function(bart_fit, analytic_df, config, predict
 #
 # Description:
 #   Estimate individual and population attributable fractions (AF, PAF)
-#   using a fitted BART model, where the reference exposure pattern x'
-#   is taken from the person with the lowest model-based risk.
+#   using a fitted BART model, where the reference exposure pattern x*
+#   is constructed from low-risk predictor values implied by the
+#   estimated causal relative risks.
 #
 #   Steps:
 #     1. Use BART to get posterior draws of Pr(Y = 1 | X, Z, S = 1)
 #        for each person under their observed predictors (p_obs).
-#     2. Identify the "reference person" as the individual with the
-#        lowest posterior mean risk.
+#     2. Construct a reference exposure pattern x* using low-risk values
+#        implied by the estimated causal relative risks:
+#          - Continuous predictors: choose the 10th or 90th percentile,
+#            depending on the estimated direction of risk.
+#          - Categorical predictors: choose the level with the lowest
+#            estimated risk.
 #     3. Build a counterfactual dataset where all predictors X are set
-#        to that person's predictor values, keeping Z fixed for each person.
-#     4. Use BART to get Pr(Y = 1 | X = x', Z, S = 1) (p_ref).
+#        to these reference values, keeping Z fixed for each person.
+#     4. Use BART to get Pr(Y = 1 | X = x*, Z, S = 1) (p_ref).
 #     5. For each posterior draw, compute
 #          AF_i^(m) = 1 - p_ref_i^(m) / p_obs_i^(m).
 #     6. Summarize:
-#          - Individual AF: posterior mean AF_i across draws.
+#          - Individual AF: posterior mean and posterior median AF_i across draws.
 #          - Population AF: average AF_i^(m) over cases (Y = 1),
-#            with posterior mean and 95% credible interval.
+#            summarized by the posterior mean, posterior median, and 95% credible interval.
 #
 # Inputs:
 #   bart_fit    : fitted dbarts::bart model (binary outcome, probit link).
@@ -240,333 +236,506 @@ compute_causal_relative_risks <- function(bart_fit, analytic_df, config, predict
 #
 # Output:
 #   list(
-#     af_summary_df = data.frame(id, af_mean),
-#     paf_summary   = data.frame(posterior_mean, ci_lower, ci_upper),
-#     ref_index     = index of reference person,
-#     ref_predictors = named vector of that person's predictor values
+#     af_summary_df = data.frame(id, af_mean, af_median),
+#     paf_summary   = data.frame(posterior_mean, posterior_median, ci_lower, ci_upper),
+#     ref_predictors = data.frame with constructed reference predictor values
+#     p_ref          = probabilities under reference predictors
 #   )
 # =============================================================================
-
-compute_attributable_fractions <- function(bart_fit, analytic_df, config) {
+compute_attributable_fractions <- function(bart_fit, analytic_df, config, irr_results, predictor_stats_df) {
+  
   # --- Basic setup ----------------------------------------------------------
   outcome_var <- config$outcome$name
   y_vec <- analytic_df[[outcome_var]]
   
-  # Helper: convert latent probit-scale output to probabilities,
-  # and clip away from 0/1 to avoid division issues.
+  # Helper probability function
   get_probs <- function(fit, newdata, eps = 1e-6) {
-    p <- predict(fit, newdata = newdata)  # S x N matrix
+    p <- predict(fit, newdata = newdata)
     pmin(pmax(p, eps), 1 - eps)
   }
   
-  # IDs (if available)
-  id_vec <- if ("person_id" %in% names(analytic_df)) {
-    analytic_df$person_id
-  } else {
-    seq_len(nrow(analytic_df))
-  }
-  
-  # Predictor names (we will treat all of these as X; Z are whatever remains)
+  # Predictor names and types
   pred_names <- vapply(config$predictors, `[[`, character(1), "name")
+  pred_types <- vapply(config$predictors, `[[`, character(1), "type")
+  names(pred_types) <- pred_names
+  
+  # Predictors that have missingness indicators
+  base_missing_vars <- config$missingness_indicators
+  if (is.null(base_missing_vars)) base_missing_vars <- character(0)
   
   # --- Step 1: probabilities under observed predictors ----------------------
-  # p_obs is S x N: rows = posterior draws, cols = individuals
   p_obs <- get_probs(bart_fit, analytic_df)
   
-  # Posterior mean risk for each individual (average over draws)
-  p_obs_mean <- colMeans(p_obs)
-  
-  # --- Step 2: identify reference person -----------------------------------
-  # Reference = person with the lowest posterior mean risk
-  ref_index <- which.min(p_obs_mean)
-  
-  # Extract that person's predictor values as the reference pattern x'
-  ref_row <- analytic_df[ref_index, pred_names, drop = FALSE]
-  ref_predictors <- as.list(ref_row[1, , drop = TRUE])
-  
-  # --- Step 3: construct counterfactual data with X = x' --------------------
+  # --- Step 2: construct counterfactual data with X = x* --------------------
+  rr_df <- irr_results$weighted_summary
   x_ref_df <- analytic_df
+  
+  # Initialize reference values
+  ref_predictors <- x_ref_df[1, pred_names, drop = FALSE]
+  
   for (vn in pred_names) {
-    x_ref_df[[vn]] <- ref_row[[vn]]
+    
+    # Skip missingness indicators themselves
+    if (grepl("^miss_", vn)) next
+    
+    message("Processing predictor: ", vn)
+    
+    # Type of present predictor
+    pred_type <- pred_types[[vn]]
+   
+    # --- Continuous predictors ---
+    if (pred_type == "continuous") {
+      # Use the estimated causal relative risk (posterior median)
+      # to determine the direction of association:
+      #   - RR > 1: higher values increase risk → use lower (10th percentile)
+      #   - RR < 1: higher values decrease risk → use higher (90th percentile)
+      rr_val  <- rr_df$posterior_median[rr_df$predictor == vn][1]
+      
+      # Pre-imputation percentiles defining the contrast
+      q10_val <- predictor_stats_df$q10[predictor_stats_df$predictor == vn]
+      q90_val <- predictor_stats_df$q90[predictor_stats_df$predictor == vn]
+      
+      # Choose the lower-risk value to construct the reference exposure
+      ref_val <- if (rr_val > 1) q10_val else q90_val      
+      
+      # Replace values
+      x_ref_df[[vn]] <- ref_val
+      
+      # If this predictor has a missingness indicator, set it to 0 under the
+      # intervention so the counterfactual predictor profile is coherent:
+      # the predictor now has a defined value and is no longer treated as missing.
+      if (vn %in% base_missing_vars) {
+        miss_var <- paste0("miss_", vn)
+        x_ref_df[[miss_var]] <- 0
+        ref_predictors[[miss_var]] <- 0
+      }
+      
+      # Store predictor value
+      ref_predictors[[vn]] <- ref_val
+    }
+    
+    # --- Categorical predictors ---
+    if (pred_type == "categorical") {
+      
+      # Extract relative risk summaries for this predictor
+      pred_rr <- rr_df[rr_df$predictor == vn, , drop = FALSE]
+      
+      # Will store a mapping: level → relative risk (vs reference)
+      level_rr <- c()
+      
+      # Loop over each contrast (e.g., "levelA vs levelB")
+      for (j in seq_len(nrow(pred_rr))) {
+        
+        # Parse contrast string into "left vs right"
+        parts <- strsplit(trimws(pred_rr$contrast[j]), "\\s+vs\\s+")[[1]]
+        if (length(parts) != 2) next
+        
+        left  <- parts[1]   # comparison level
+        right <- parts[2]   # reference level
+        rr    <- pred_rr$posterior_median[j]
+        
+        # Assign RR = 1 to the reference level (if not already set)
+        if (!(right %in% names(level_rr))) level_rr[right] <- 1
+        
+        # Assign RR for the comparison level relative to the reference
+        level_rr[left] <- rr
+        
+      }
+      
+      # Remove "Missing" level if present (not a meaningful intervention target)
+      level_rr <- level_rr[!names(level_rr) %in% "Missing"]
+      
+      # Choose the lowest-risk category as the reference exposure (x')
+      ref_level <- names(level_rr)[which.min(level_rr)]
+      
+      # Assign the lowest-risk category to everyone
+      x_ref_df[[vn]] <- factor(ref_level, levels = levels(x_ref_df[[vn]]))
+
+      # Store reference value
+      ref_predictors[[vn]] <- factor(ref_level, levels = levels(x_ref_df[[vn]]))      
+    }
   }
   
-  # --- Step 4: probabilities under reference predictors ---------------------
-  p_ref <- get_probs(bart_fit, x_ref_df)  # S x N
+  # --- Step 3: probabilities under reference predictors ---------------------
+  p_ref <- get_probs(bart_fit, x_ref_df)
   
-  cat("\n--- Diagnostics ---\n")
-  cat("Range of predicted risks (observed):", range(p_obs_mean), "\n")
-  cat("Reference person's risk:",
-      round(p_obs_mean[ref_index], 6), "\n")
-  
-  p_ref_mean <- colMeans(p_ref)
-  cat("Range of predicted risks (reference):", range(p_ref_mean), "\n")
-  
-  cat("Mean ratio p_ref/p_obs:",
-      mean(p_ref_mean / p_obs_mean), "\n")
-  
-  # --- Step 5: individual AF per draw ---------------------------------------
-  # AF_i^(m) = 1 - p_ref_i^(m) / p_obs_i^(m)
-  af_sN <- 1 - (p_ref / p_obs)  # same S x N dimension
-  
-  # Posterior mean AF per person (average over draws)
+  # --- Step 4: individual AF per draw ---------------------------------------
+  af_sN <- 1 - (p_ref / p_obs)
   af_mean <- colMeans(af_sN)
+  af_median <- apply(af_sN, 2, median)
   
-  af_summary_df <- data.frame(
-    id      = id_vec,
-    af_mean = af_mean
-  )
-  
-  # --- Step 6: population AF (cases only) -----------------------------------
-  # For each draw m, average AF_i^(m) over cases (Y = 1)
+  # --- Step 5: population AF (cases only) -----------------------------------
   case_idx <- which(y_vec == 1)
-  if (length(case_idx) == 0) {
-    warning("No cases (Y = 1) in analytic_df; population AF undefined.")
-    paf_draws <- NA_real_
-  } else {
-    # subset to columns of cases, then average across individuals for each draw
-    paf_draws <- rowMeans(af_sN[, case_idx, drop = FALSE])
-  }
+  paf_draws <- rowMeans(af_sN[, case_idx, drop = FALSE])
   
+  # Summarize population attributable fraction across posterior draws
   paf_summary <- data.frame(
-    posterior_mean = mean(paf_draws),
-    ci_lower       = quantile(paf_draws, 0.025),
-    ci_upper       = quantile(paf_draws, 0.975)
+    posterior_mean   = mean(paf_draws),           # average effect across draws
+    posterior_median = median(paf_draws),         # robust central tendency
+    ci_lower         = quantile(paf_draws, 0.025),# lower bound of 95% credible interval
+    ci_upper         = quantile(paf_draws, 0.975) # upper bound of 95% credible interval
   )
   
-  # --- Return ---------------------------------------------------------------
   list(
-    af_summary_df  = af_summary_df,
-    paf_summary    = paf_summary,
-    ref_index      = ref_index,
-    ref_predictors = ref_predictors
+    af_mean        = af_mean,        # per-individual posterior mean AF
+    af_median      = af_median,      # per-individual posterior median AF
+    paf_summary    = paf_summary,    # population-level AF summary
+    ref_predictors = ref_predictors, # reference exposure pattern x' used in analysis
+    p_ref          = p_ref           # probabilities under reference predictors
   )
 }
 
-
 # =============================================================================
-# compute_shapley_af.R  (updated)
+# compute_shapley_af.R
 #
 # Description:
-#   Decompose the attributable fraction
-#       f(X) = 1 - p_ref(Z) / p_obs(X, Z)
-#   into Shapley contributions for each predictor X, keeping Z fixed.
+#   For each sampled individual i, define the coalition value
 #
-#   For each selected individual i:
-#     - We compute a matrix phi_mat (n_draws x p), where each row is a
-#       posterior draw and each column is a predictor.
-#     - We then:
-#         * take the column means of phi_mat as that individual's posterior
-#           mean Shapley values (for reporting / plotting).
-#         * (for autism cases only) accumulate phi_mat into a running
-#           population-level matrix so we can recover the posterior
-#           distribution of population Shapley values.
+#       v_i(S) = E_donor[ 1 - p(x^*, Z_i) / p(X_{i,S}, X_{-S}^{donor}, Z_i) ],
 #
-#   Population Shapley values:
-#     - For each posterior draw m, we average phi_mat[m, ] across autism cases,
-#       giving a population Shapley value per draw and predictor.
-#     - We then summarize across draws to get posterior mean and 95% credible
-#       intervals for each predictor.
+#   where predictors in S are set to the individual's observed values,
+#   predictors not in S are taken from donor rows sampled from the empirical
+#   distribution of X, and Z_i is held fixed.
+#
+#   The function computes a permutation-based Shapley decomposition of
+#
+#       v_i(full) - v_i(empty),
+#
+#   so each predictor's contribution represents the average change in the
+#   attributable-fraction functional when that predictor is moved from the
+#   donor baseline to the individual's observed value.
+#
+#   For each sampled individual i:
+#     1. Draw random permutations of the substantive predictors in X.
+#     2. For each permutation, draw donor rows from the empirical distribution
+#        of X.
+#     3. Starting from the empty coalition, progressively overwrite donor
+#        columns with the individual's observed predictor values according
+#        to the permutation order.
+#     4. At each step, compute the change in the value function
+#            v_i(S) = E_donor[ AF_i(X_S observed, X_-S donor, Z_i) ].
+#     5. Average marginal contributions over permutations to approximate
+#        Shapley contributions for each posterior draw.
+#
+#   Population-level Shapley values:
+#     - For autism cases only, average posterior Shapley draws across cases.
+#     - Then summarize across posterior draws.
 #
 # Inputs:
-#   bart_fit       : fitted dbarts::bart model
-#   analytic_df    : dataframe used to train model (after imputation)
-#   config         : list with $outcome, $predictors, etc.
-#   ref_index      : index of reference individual used to build p_ref
-#   n_individuals  : number of individuals for Shapley computation
-#   n_samples      : number of random permutations per individual
-#   n_donors       : number of donor rows used when sampling remaining features
+#   bart_fit      : fitted dbarts::bart model
+#   analytic_df   : data frame used to train the model (after imputation)
+#   config        : list with $outcome, $predictors, etc.
+#   p_ref         : counterfactual predictions for the reference profile x^*
+#   n_individuals : number of individuals for Shapley computation
+#   n_samples     : number of random permutations per individual
+#   n_donors      : number of donor rows used to approximate the expectation
+#                   over unassigned predictors
 #
-# Output: list with
-#   - individual: tibble(id, feature, shapley_mean)
-#   - population: tibble(feature, mean_shapley, lower, upper, n_cases_used)
+# Output:
+#   list with elements:
+#     - individual_feature_shapley
+#     - individual_af_components
+#     - population_feature_shapley
+#     - population_af_components
 # =============================================================================
-
 compute_shapley_af <- function(bart_fit,
                                analytic_df,
                                config,
-                               ref_index = NULL,
+                               p_ref,
                                n_individuals = 5,
                                n_samples = 100,
-                               n_donors  = 50) {
-  # -----------------------------
-  # Setup
-  # -----------------------------
+                               n_donors  = 50,
+                               n_cores   = 1L) {
+  
+  # ---------------------------------------------------------------------------
+  # 1. Basic setup
+  # ---------------------------------------------------------------------------
+  # Outcome name
   outcome_var <- config$outcome$name
-  X_names <- vapply(config$predictors, `[[`, character(1), "name")
-  Z_names <- setdiff(names(analytic_df), c(X_names, outcome_var))
   
-  # Helper: probit-scale predictions -> probabilities (draws x N)
-  get_probs_draws <- function(fit, newdata, eps = 1e-6) {
-    p <- predict(fit, newdata = newdata)   # ndpost x N
-    p[p < eps]     <- eps
-    p[p > 1 - eps] <- 1 - eps
-    p
+  # All predictor columns used by the model, including any miss_* indicators
+  all_X_names <- vapply(config$predictors, `[[`, character(1), "name")
+  
+  # Shapley players are the substantive predictors (exclude miss_* indicators)
+  player_names <- all_X_names[!grepl("^miss_", all_X_names)]
+   
+  # Z variables are everything not in the model predictors or outcome.
+  Z_names <- setdiff(names(analytic_df), c(all_X_names, outcome_var))
+  
+  # Number of substantive predictors
+  n_pred <- length(player_names)
+
+  # Number of observations/persons
+  n_obs  <- nrow(analytic_df)
+  
+  # Helper: posterior predicted probabilities, clipped away from 0 and 1
+  # to avoid instability in ratios such as p_ref / p_obs.
+  get_probs <- function(fit, newdata, eps = 1e-6) {
+    p <- predict(fit, newdata = newdata)   # draws x nrow(newdata)
+    pmin(pmax(p, eps), 1 - eps)
   }
   
-  # -----------------------------
-  # Reference scenario p_ref
-  # -----------------------------
-  if (is.null(ref_index)) {
-    stop("ref_index must be supplied (index of reference individual).")
-  }
-  
-  ref_row <- analytic_df[ref_index, X_names, drop = FALSE]
-  x_ref_df <- analytic_df
-  for (vn in X_names) {
-    x_ref_df[[vn]] <- ref_row[[vn]]
-  }
-  
-  # Posterior draws for reference probabilities: (draws x N)
-  p_ref_draws <- get_probs_draws(bart_fit, x_ref_df)
-  n_draws     <- nrow(p_ref_draws)
-  p           <- length(X_names)
-  
-  # -----------------------------
-  # Sample individuals for Shapley
-  # -----------------------------
-  set.seed(2025)
-  all_idx <- seq_len(nrow(analytic_df))
-  idx <- sample(all_idx, size = min(n_individuals, length(all_idx)))
-  
-  # Prepare storage:
-  indiv_list <- vector("list", length(idx))  # for individual posterior means
-  
-  # For population-level Shapley:
-  pop_phi_mat <- matrix(0, nrow = n_draws, ncol = p)
-  colnames(pop_phi_mat) <- X_names
-  n_cases_used <- 0L
-  
-  # For quick outcome lookup
+  # Split data in X, Z, and outcome
+  X_df <- analytic_df[, all_X_names, drop = FALSE]
+  Z_df <- analytic_df[, Z_names, drop = FALSE]
   y_vec <- analytic_df[[outcome_var]]
+
+  # ---------------------------------------------------------------------------
+  # 2. Sample individuals first
+  # ---------------------------------------------------------------------------
+
+  idx <- sample(seq_len(n_obs), size = min(n_individuals, n_obs), replace = FALSE)
   
-  # -----------------------------
-  # Main loop over individuals
-  # -----------------------------
-  for (k in seq_along(idx)) {
+  # ---------------------------------------------------------------------------
+  # 3. Reference scenario p(x^*, Z) for selected individuals only
+  # ---------------------------------------------------------------------------
+
+  p_ref_draws_sel <- p_ref[, idx, drop = FALSE]
+  n_draws <- nrow(p_ref_draws_sel)
+  
+  # ---------------------------------------------------------------------------
+  # 4. Helper: compute Shapley quantities for one sampled individual
+  # ---------------------------------------------------------------------------
+  #
+  # This helper returns all quantities needed later:
+  #   - feature-level Shapley summaries
+  #   - individual-level baseline/full summaries
+  #   - full posterior draw objects needed for population-level aggregation
+  #
+  # The argument k indexes the sampled subset:
+  #   - i = idx[k] is the row index in the original analytic data
+  #   - p_ref_draws_sel[, k] are the corresponding reference probabilities
+  # ---------------------------------------------------------------------------
+  
+  compute_one_individual <- function(k) {
+    
+    # i is the row index in the original data.
+    # k is the position within the sampled subset.
     i <- idx[k]
     
-    x_i <- analytic_df[i, X_names, drop = FALSE]
-    z_i <- analytic_df[i, Z_names, drop = FALSE]
+    # Reference probabilities for this sampled individual only.
+    p_ref_i <- p_ref_draws_sel[, k]
     
-    # Matrix of Shapley contributions per draw (rows) and predictor (cols)
-    phi_mat <- matrix(0, nrow = n_draws, ncol = p)
-    colnames(phi_mat) <- X_names
+    # Observed predictor and covariate values for individual i.
+    x_i <- X_df[i, , drop = FALSE]
+    z_i <- Z_df[i, , drop = FALSE]
     
-    # --- v(empty set): expected AF when all X replaced by random donors -----
-    donors0 <- analytic_df[
-      sample(seq_len(nrow(analytic_df)), n_donors),
-      X_names, drop = FALSE
-    ]
-    Z_mat0 <- z_i[rep(1, nrow(donors0)), , drop = FALSE]
-    df0    <- cbind(donors0, Z_mat0)
+    # Repeat observed values across donor rows for easy column replacement.
+    x_i_rep <- x_i[rep.int(1L, n_donors), , drop = FALSE]
+    z_i_rep <- z_i[rep.int(1L, n_donors), , drop = FALSE]
     
-    p_obs0 <- get_probs_draws(bart_fit, df0)      # draws x n_donors
-    AF_md_empty <- 1 - (p_ref_draws[, i] / p_obs0)  # recycle col i across donors
-    v_empty_draw <- rowMeans(AF_md_empty)         # length = n_draws
+    # Posterior Shapley draws for this individual:
+    #   rows    = posterior draws
+    #   columns = predictors
+    phi_mat <- matrix(0, nrow = n_draws, ncol = n_pred)
+    colnames(phi_mat) <- player_names
     
-    # --- Monte Carlo KernelSHAP-style approximation -------------------------
+    # Store baseline and full values.
+    # These accumulate across permutations and are averaged later.
+    v_empty_avg <- numeric(n_draws)
+    v_full_avg  <- numeric(n_draws)
+    
+    # -------------------------------------------------------------------------
+    # 4a. Monte Carlo over random permutations
+    # -------------------------------------------------------------------------
+    
     for (s in seq_len(n_samples)) {
-      perm <- sample(X_names)
-      x_temp <- as.data.frame(matrix(NA, ncol = p, nrow = 1))
-      colnames(x_temp) <- X_names
       
-      # start each permutation from v(empty set)
-      v_prev_draw <- v_empty_draw
+      # Random order in which predictors are added
+      perm <- sample(player_names, size = n_pred, replace = FALSE)
+      
+      # Draw donor rows from the empirical distribution of X
+      donor_idx <- sample(seq_len(n_obs), size = n_donors, replace = TRUE)
+      donors <- X_df[donor_idx, , drop = FALSE]
+      
+      # -----------------------------------------------------------------------
+      # Value at the empty coalition
+      # -----------------------------------------------------------------------
+      #
+      # At S = empty set, all predictors in X come from donor rows, while Z is
+      # fixed at the observed value for individual i.
+      # -----------------------------------------------------------------------
+      
+      df_work <- cbind(donors, z_i_rep)
+      p_obs_empty <- get_probs(bart_fit, df_work)   # draws x n_donors
+      
+      # Value function for empty set
+      v_prev_draw <- rowMeans(1 - p_ref_i / p_obs_empty)
+      
+      # Accumulate empty-set value for this permutation
+      v_empty_avg <- v_empty_avg + v_prev_draw
+      
+      # -----------------------------------------------------------------------
+      # Walk through the permutation
+      # -----------------------------------------------------------------------
       
       for (j in seq_along(perm)) {
-        # include predictor perm[j] in the subset
-        x_temp[[perm[j]]] <- x_i[[perm[j]]]
         
-        # draw donor rows and fill in unspecified predictors
-        donors <- analytic_df[
-          sample(seq_len(nrow(analytic_df)), n_donors),
-          X_names, drop = FALSE
-        ]
-        for (nm in X_names) {
-          if (!is.na(x_temp[[nm]])) {
-            donors[[nm]] <- x_temp[[nm]]
-          }
+        nm <- perm[j]
+        
+        # Once nm enters the coalition, replace that donor column with the
+        # individual's observed value and keep it fixed thereafter.
+        df_work[[nm]] <- x_i_rep[[nm]]
+        
+        # If nm has a corresponding miss_* indicator, move it together
+        miss_var <- paste0("miss_", nm)
+        if (miss_var %in% names(df_work)) {
+          df_work[[miss_var]] <- x_i_rep[[miss_var]]
         }
         
-        # combine with fixed Z for this individual
-        Z_mat <- z_i[rep(1, nrow(donors)), , drop = FALSE]
-        df    <- cbind(donors, Z_mat)
+        # Current coalition data: assigned predictors use x_i, unassigned
+        # predictors use donors, and Z stays fixed at z_i.
+        p_obs_curr <- get_probs(bart_fit, df_work)   # draws x n_donors
         
-        # posterior draws of p_obs for this subset
-        p_obs_draws <- get_probs_draws(bart_fit, df)  # draws x n_donors
+        # Average AF across donor rows for each posterior draw.
+        v_curr_draw <- rowMeans(1 - p_ref_i / p_obs_curr)
         
-        # AF for each draw m and donor d
-        AF_md <- 1 - (p_ref_draws[, i] / p_obs_draws) # draws x n_donors
+        # Marginal contribution of nm in this permutation.
+        phi_mat[, nm] <- phi_mat[, nm] + (v_curr_draw - v_prev_draw)
         
-        # value function v(S) for this subset (per draw)
-        v_curr_draw <- rowMeans(AF_md)  # length = n_draws
-        
-        # marginal contribution of feature perm[j] for each draw
-        phi_mat[, perm[j]] <- phi_mat[, perm[j]] + (v_curr_draw - v_prev_draw)
-        
-        # update baseline for next feature in permutation
+        # Update previous draw value function
         v_prev_draw <- v_curr_draw
       }
+      
+      # Store value of full set
+      v_full_avg <- v_full_avg + v_prev_draw
     }
     
-    # average over permutations
-    phi_mat <- phi_mat / n_samples   # still draws x predictors
+    # Average over permutations to obtain the Monte Carlo Shapley approximation.
+    phi_mat <- phi_mat / n_samples
+    v_empty_avg <- v_empty_avg / n_samples
+    v_full_avg  <- v_full_avg  / n_samples
     
-    # posterior mean Shapley value per feature for this individual
-    phi_mean <- colMeans(phi_mat)
+    # -------------------------------------------------------------------------
+    # 5. Summarize individual-level Shapley values
+    # -------------------------------------------------------------------------
     
-    indiv_list[[k]] <- tibble::tibble(
-      id           = i,
-      feature      = X_names,
-      shapley_mean = phi_mean
+    shapley_df <- data.frame(
+      id             = i,
+      feature        = player_names,
+      shapley_mean   = colMeans(phi_mat),
+      shapley_median = apply(phi_mat, 2, median)
     )
     
-    # accumulate into population matrix if this individual is a case
-    if (y_vec[i] == 1) {
-      pop_phi_mat  <- pop_phi_mat + phi_mat
-      n_cases_used <- n_cases_used + 1L
-    }
+    # Store individual-level baseline values
+    value_df <- data.frame(
+      id              = i,
+      v_empty_mean    = mean(v_empty_avg),
+      v_empty_median  = median(v_empty_avg),
+      v_full_mean     = mean(v_full_avg),
+      v_full_median   = median(v_full_avg)
+    )
+    
+    # Return everything needed downstream.
+    list(
+      id          = i,
+      is_case     = (y_vec[i] == 1),
+      phi_mat     = phi_mat,
+      v_empty_avg = v_empty_avg,
+      v_full_avg  = v_full_avg,
+      shapley_df  = shapley_df,
+      value_df    = value_df
+    )
   }
   
-  # -----------------------------
-  # Combine individual results
-  # -----------------------------
-  shap_individual <- dplyr::bind_rows(indiv_list)
+  # ---------------------------------------------------------------------------
+  # 6. Compute individual results, optionally in parallel
+  # ---------------------------------------------------------------------------
+  #
+  # Each sampled individual can be processed independently, so the natural
+  # place to parallelize is over k = 1, ..., length(idx).
+  #
+  # On macOS, parallel::mclapply() works and is convenient. When n_cores = 1,
+  # we fall back to lapply() for easier debugging and reproducibility.
+  # ---------------------------------------------------------------------------
   
-  # -----------------------------
-  # Population Shapley distribution
-  # -----------------------------
-  if (n_cases_used > 0) {
-    # average phi_mat over cases for each draw
-    pop_phi_mat <- pop_phi_mat / n_cases_used   # draws x predictors
-    
-    # summarize across draws for each predictor
-    mean_shapley <- colMeans(pop_phi_mat)
-    lower <- apply(pop_phi_mat, 2, stats::quantile, probs = 0.025)
-    upper <- apply(pop_phi_mat, 2, stats::quantile, probs = 0.975)
-    
-    shap_population <- tibble::tibble(
-      feature      = X_names,
-      mean_shapley = mean_shapley,
-      lower        = lower,
-      upper        = upper,
-      n_cases_used = n_cases_used
+  if (n_cores > 1L) {
+    results_list <- parallel::mclapply(
+      X = seq_along(idx),
+      FUN = compute_one_individual,
+      mc.cores = n_cores
     )
   } else {
-    shap_population <- tibble::tibble(
-      feature      = X_names,
-      mean_shapley = NA_real_,
-      lower        = NA_real_,
-      upper        = NA_real_,
-      n_cases_used = 0L
+    results_list <- lapply(seq_along(idx), compute_one_individual)
+  }
+  
+  # ---------------------------------------------------------------------------
+  # 7. Combine individual-level results
+  # ---------------------------------------------------------------------------
+  
+  shap_individual <- dplyr::bind_rows(lapply(results_list, `[[`, "shapley_df"))
+  shap_individual_values <- dplyr::bind_rows(lapply(results_list, `[[`, "value_df"))
+  
+  # ---------------------------------------------------------------------------
+  # 8. Population-level summaries
+  # ---------------------------------------------------------------------------
+  #
+  # Population-level quantities are computed by averaging posterior draw
+  # objects across sampled autism cases only.
+  # ---------------------------------------------------------------------------
+  
+  case_results <- Filter(function(x) isTRUE(x$is_case), results_list)
+  n_cases_used <- length(case_results)
+  
+  if (n_cases_used > 0) {
+    
+    pop_phi_mat <- Reduce(`+`, lapply(case_results, `[[`, "phi_mat")) / n_cases_used
+    pop_v_empty <- Reduce(`+`, lapply(case_results, `[[`, "v_empty_avg")) / n_cases_used
+    pop_v_full  <- Reduce(`+`, lapply(case_results, `[[`, "v_full_avg")) / n_cases_used
+    
+    shap_population <- data.frame(
+      feature        = player_names,
+      mean_shapley   = colMeans(pop_phi_mat),
+      median_shapley = apply(pop_phi_mat, 2, median),
+      lower          = apply(pop_phi_mat, 2, stats::quantile, probs = 0.025),
+      upper          = apply(pop_phi_mat, 2, stats::quantile, probs = 0.975),
+      n_cases_used   = n_cases_used
+    )
+    
+    population_values <- data.frame(
+      mean_v_empty    = mean(pop_v_empty),
+      median_v_empty  = median(pop_v_empty),
+      lower_v_empty   = stats::quantile(pop_v_empty, probs = 0.025),
+      upper_v_empty   = stats::quantile(pop_v_empty, probs = 0.975),
+      mean_v_full     = mean(pop_v_full),
+      median_v_full   = median(pop_v_full),
+      lower_v_full    = stats::quantile(pop_v_full, probs = 0.025),
+      upper_v_full    = stats::quantile(pop_v_full, probs = 0.975),
+      n_cases_used    = n_cases_used
+    )
+    
+  } else {
+    
+    shap_population <- data.frame(
+      feature        = player_names,
+      mean_shapley   = NA_real_,
+      median_shapley = NA_real_,
+      lower          = NA_real_,
+      upper          = NA_real_,
+      n_cases_used   = 0L
+    )
+    
+    population_values <- data.frame(
+      mean_v_empty    = NA_real_,
+      median_v_empty  = NA_real_,
+      lower_v_empty   = NA_real_,
+      upper_v_empty   = NA_real_,
+      mean_v_full     = NA_real_,
+      median_v_full   = NA_real_,
+      lower_v_full    = NA_real_,
+      upper_v_full    = NA_real_,
+      n_cases_used    = 0L
     )
   }
   
-  # -----------------------------
-  # Return
-  # -----------------------------
+  # ---------------------------------------------------------------------------
+  # 8. Return
+  # ---------------------------------------------------------------------------
+  
   list(
-    individual = shap_individual,
-    population = shap_population
+    individual_feature_shapley = shap_individual,
+    individual_af_components   = shap_individual_values,
+    population_feature_shapley = shap_population,
+    population_af_components   = population_values
   )
 }

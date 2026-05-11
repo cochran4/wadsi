@@ -27,9 +27,9 @@ To define these quantities, we need a model of how the data arise. We use a stru
 
 A companion protocol paper details the assumptions required to interpret these results causally. Chief among them is no unmeasured confounding: after conditioning on the observed covariates $Z$, the predictor $X$ can be treated as if randomly assigned. Correct specification of the relationship among $Y$, $X$, and $Z$ is also critical, as misspecification can induce bias even with appropriate adjustment. To reduce this risk, we use Bayesian Additive Regression Trees (BART), which flexibly captures nonlinearities and interactions while maintaining regularization. This balance makes BART a strong starting point for causal inference.
 
-So far, we have focused on one predictor at a time. Now we turn to the joint effect of many factors. Let $X$ denote the collection of early-life factors of interest, taken together. The remaining variables, those we adjust for but do not measure causal effects for, are collected in $Z$. 
+So far, we have focused on one predictor at a time. Now we turn to the joint effect of many factors. Let $X$ denote the collection of early-life factors of interest, taken together. The remaining variables, those we adjust for but do not measure causal effects for, are collected in $Z$.
 
-We consider what would happen if we could shift all of $X$ at once. We define attributable fractions. These summarize how the overall likelihood of autism would change under a joint shift in all predictors. There are two versions. The first is the **individual attributable fraction.** For everyone with covariates $Z$, it measures how a person's likelihood of autism would change if all predictors were set to a common reference level $x^*$. 
+We consider what would happen if we could shift all of $X$ at once. We define attributable fractions. These summarize how the overall likelihood of autism would change under a joint shift in all predictors. There are two versions. The first is the **individual attributable fraction.** For everyone with covariates $Z$, it measures how a person's likelihood of autism would change if all predictors were set to a common reference level $x^*$.
 
 The second is the **population attributable fraction.** We compare the observed likelihood of autism in the entire population to the likelihood under a scenario in which everyone's predictors are set to the same reference level $x^*$. The link between the two attributable fractions is described in the companion protocol paper.
 
@@ -45,7 +45,9 @@ We begin by setting up the environment. Sourcing `R/imports.R` loads the librari
 # Load necessities
 source("R/imports.R")
 ```
+
 We also fix a random seed so that all stochastic steps in the pipeline (imputation, resampling, and model fitting) are reproducible.
+
 ```{r}
 # Set seed for reproducibility across the entire pipeline
 set.seed(20260322)
@@ -169,6 +171,7 @@ analytic_df <- finalize_analytic_dataset(imputed_df, final_config)
 # Summarize
 summary(analytic_df)
 ```
+
 At this point, the dataset is ready for analysis. The predictors, covariates, and outcome are defined by the configuration, and any preprocessing steps have been applied. To confirm what enters the analysis, we summarize these variables below.
 
 ```{r}
@@ -236,9 +239,8 @@ if (is_sandbox_data) {
 
 # Model building
 
-We next fit a Bayesian Additive Regression Trees (BART) model for the conditional probability of the outcome in the sampled population,
-$$\Pr(Y = 1 \mid X, Z, S = 1).$$
-Here, $Y$ is the outcome, $X$ is the predictor of interest, $Z$ is the set of adjustment variables, and $S = 1$ indicates that the individual is in the sampled dataset. BART provides a flexible, nonparametric model for this conditional probability. Rather than specifying a functional form, it learns nonlinearities and interactions directly from the data. The fitted model (`bart_fit`) serves as the foundation for all subsequent effect estimates.
+We next fit a Bayesian Additive Regression Trees (BART) model for the conditional probability of the outcome in the sampled population, $$\Pr(Y = 1 \mid X, Z, S = 1).$$ Here, $Y$ is the outcome, $X$ is the predictor of interest, $Z$ is the set of adjustment variables, and $S = 1$ indicates that the individual is in the sampled dataset. BART provides a flexible, nonparametric model for this conditional probability. Rather than specifying a functional form, it learns nonlinearities and interactions directly from the data. The fitted model (`bart_fit`) serves as the foundation for all subsequent effect estimates.
+
 ```{r}
 # Identify outcome and predictors of interest
 outcome_var <- final_config$outcome$name
@@ -290,10 +292,13 @@ diag_results <- model_diagnostics(
   ndpost = ndpost
 )
 ```
+
 Below we show a trace plot. The horizontal axis indexes successive draws from the fitting procedure, and the vertical axis shows a summary of the fitted values. Each panel corresponds to an independent run of the algorithm. If the procedure has stabilized, the traces should fluctuate around a constant level and look similar across panels.
+
 ```{r}
 diag_results$plots$trace
 ```
+
 Below we show the calibration plot. Each point summarizes a group of individuals with similar predicted risk. The horizontal axis shows what the model predicts, and the vertical axis shows what actually happens. The dashed line represents perfect agreement. Points below the line indicate overprediction, while points above the line indicate underprediction.
 
 ```{r}
@@ -302,27 +307,20 @@ diag_results$plots$calib
 
 # Effect estimation
 
-## Individual likelihood ratios
+## Individual relative risks
 
-We now use the fitted BART model to study what would happen to an individual's risk if we changed one predictor while holding everything else fixed. The model gives, for each individual and each posterior draw $\theta^{(m)}$, a predicted probability of the outcome,
-$$\widehat{\mu}(x, z; \theta^{(m)}) \approx \Pr(Y = 1 \mid X=x, Z=z, S = 1)$$
-Because the model can be evaluated at any input, we can change a predictor $X$ from one value $x'$ to another value $x$, while keeping the covariates Z fixed at their observed values. This lets us compare two hypothetical scenarios for the same individual.
+We now use the fitted BART model to study what would happen to an individual's risk if we changed one predictor while holding everything else fixed. The model gives, for each individual and each posterior draw $\theta^{(m)}$, a predicted probability of the outcome, $$\widehat{\mu}(x, z; \theta^{(m)}) \approx \Pr(Y = 1 \mid X=x, Z=z, S = 1)$$ Because the model can be evaluated at any input, we can change a predictor $X$ from one value $x'$ to another value $x$, while keeping the covariates Z fixed at their observed values. This lets us compare two hypothetical scenarios for the same individual.
 
-We summarize this comparison using an **individual relative risk:** $$\mathrm{IRR}(x,x',Z) = \frac{\Pr(Y(x)=1 \mid Z)}{\Pr(Y(x')=1 \mid Z)},$$ 
-which measures how much more (or less) likely the outcome would be for a person if their predictor were set to $x$ instead of $x'$. Here, $Y(x)$ and $Y(x')$ denote the outcomes that would be observed for the same individual under these two hypothetical settings of the predictor, with all other variables held fixed. 
+We summarize this comparison using an **individual relative risk:** $$\mathrm{IRR}(x,x',Z) = \frac{\Pr(Y(x)=1 \mid Z)}{\Pr(Y(x')=1 \mid Z)},$$ which measures how much more (or less) likely the outcome would be for a person if their predictor were set to $x$ instead of $x'$. Here, $Y(x)$ and $Y(x')$ denote the outcomes that would be observed for the same individual under these two hypothetical settings of the predictor, with all other variables held fixed.
 
-In practice, we approximate this quantity using the fitted model. For each posterior draw, we evaluate the predicted probabilities under the two scenarios and compute an odds ratio,
-$$\mathrm{IRR}(x,x',Z) \approx \frac{\widehat{\mu}(x, Z; \theta^{(m)})(1-\widehat{\mu}(x', Z; \theta^{(m)}))}
-{\widehat{\mu}(x', Z; \theta^{(m)})(1-\widehat{\mu}(x, z; \theta^{(m)}))}$$
-The justification for this approximation, and the assumptions behind it, are given in the protocol.
+In practice, we approximate this quantity using the fitted model. For each posterior draw, we evaluate the predicted probabilities under the two scenarios and compute an odds ratio, $$\mathrm{IRR}(x,x',Z) \approx \frac{\widehat{\mu}(x, Z; \theta^{(m)})(1-\widehat{\mu}(x', Z; \theta^{(m)}))}
+{\widehat{\mu}(x', Z; \theta^{(m)})(1-\widehat{\mu}(x, z; \theta^{(m)}))}$$ The justification for this approximation, and the assumptions behind it, are given in the protocol.
 
 We repeat this computation for each individual, each predictor, and each posterior draw of the model. In this way, we build up a distribution of effects that reflects both individual heterogeneity and uncertainty in the fitted model.
 
-This computation is repeated for each individual, each predictor, and each posterior draw of the BART model parameters. To make the comparisons concrete, we fix a reference contrast for each predictor. For categorical predictors, we compare each level $x$ to a reference level $x'$, taken to be the most common category. 
+This computation is repeated for each individual, each predictor, and each posterior draw of the BART model parameters. To make the comparisons concrete, we fix a reference contrast for each predictor. For categorical predictors, we compare each level $x$ to a reference level $x'$, taken to be the most common category.
 
-For categorical predictors, we contrast every level of the predictor ($x$) against the most common level ($x'$). For continuous predictors, we compare two representative values: one standard deviation above the mean and one standard deviation below the mean 
-$$x = M + SD$ and $x' = M - SD$$, 
-with $M$ and $SD$ computed from the original data (i.e. before imputation). 
+For categorical predictors, we contrast every level of the predictor ($x$) against the most common level ($x'$). For continuous predictors, we compare two representative values: the 90th and 10th percentiles, denoted by x and x'. These percentiles are computed from the original data (i.e., before imputation).
 
 ```{r}
 # Compute relative risks
@@ -334,7 +332,7 @@ irr_results <- compute_causal_relative_risks(
 )
 ```
 
-These contrasts produce a posterior distribution of individual relative risks for each person and predictor. We summarize each distribution by its posterior mean and visualize the resulting individual-level effects below.
+These contrasts produce a posterior distribution of individual relative risks for each person and predictor. We summarize each distribution by its posterior median and visualize the resulting individual-level effects below.
 
 ```{r}
 # Plot posterior mean individual relative risks
@@ -349,9 +347,9 @@ plot_individual_rr(
 
 ![](outputs/individual_lr_vertical.png){width="80%"}
 
-## Population likelihood ratios
+## Population relative risks
 
-So far we have focused on individual relative risks: how a person’s predicted likelihood of autism changes when we move their predictor from $x'$ to $x$. Now we move to the population level. We compare two hypothetical worlds: one in which everyone’s predictor is set to $x$, and one in which it is set to $x'$. The quantity of interest is the **population causal likelihood ratios:**: $$\mathrm{PRR}(x,x') = \frac{\Pr(Y(x)=1)}{\Pr(Y(x')=1)},$$ which captures how the overall risk would change under these two settings. 
+So far we have focused on individual relative risks: how a person's predicted likelihood of autism changes when we move their predictor from $x'$ to $x$. Now we move to the population level. We compare two hypothetical worlds: one in which everyone’s predictor is set to $x$, and one in which it is set to $x'$. The quantity of interest is the **population relative risk:**: $$\mathrm{PRR}(x,x') = \frac{\Pr(Y(x)=1)}{\Pr(Y(x')=1)},$$ which captures how the overall risk would change under these two settings.
 
 As shown in the protocol, this population quantity can be recovered by taking a weighted averaged of the individual relative risks, but with weights that adjust for how the analytic sample relates to the target population. For each individual, these weights are proportional to $$\frac{
 \Pr(Y = 1 \mid Z, X = x', S = 1)\, \Pr(Y = 1) / \Pr(Y = 1 \mid S = 1)
@@ -362,13 +360,13 @@ As shown in the protocol, this population quantity can be recovered by taking a 
 
 In practice, each term in this expression is estimated as follows:
 
-- $\Pr(Y=1)$ and $\Pr(Y=0)$ are specified in the `config` file, reflecting the target population. (They need not sum to one if the target population includes other diagnostic groups).
+-   $\Pr(Y=1)$ and $\Pr(Y=0)$ are specified in the `config` file, reflecting the target population.
 
-- $\Pr(Y=1 \mid S=1)$ and $\Pr(Y=0 \mid S=1)$ are computed directly from the analytic dataset
+-   $\Pr(Y=1 \mid S=1)$ and $\Pr(Y=0 \mid S=1)$ are computed directly from the analytic dataset
 
-- $\Pr(Y=y \mid Z, X=x', S=1)$ is obtained from the fitted BART model
+-   $\Pr(Y=y \mid Z, X=x', S=1)$ is obtained from the fitted BART model
 
-For each posterior draw, we compute these weights and take a weighted average of the individual relative risks across all individuals. Repeating this across posterior draws gives a distribution for the population relative risk, which we summarize using the posterior mean and a 95% credible interval.
+For each posterior draw, we compute these weights and take a weighted average of the individual relative risks across all individuals. Repeating this across posterior draws gives a distribution for the population relative risk, which we summarize using the posterior median and a 95% credible interval.
 
 These population quantities appear in the table below:
 
@@ -376,11 +374,8 @@ These population quantities appear in the table below:
 # Put together table of population relative risks
 
 # Extract readable predictor labels from config
-label_map <- if (!is.null(final_config$predictor_labels)) {
-  unlist(final_config$predictor_labels)
-} else {
-  NULL
-}
+label_map <- unlist(final_config$predictor_labels)
+
 
 # Build predictor type lookup from config
 predictor_type_df <- dplyr::bind_rows(final_config$predictors) %>%
@@ -412,15 +407,13 @@ clean_categorical_contrast <- function(x, is_binary) {
   x
 }
 
-# Clean continuous contrasts using mean +/- SD from predictor_stats_df
-clean_continuous_contrast <- function(contrast, mean = NA_real_, sd = NA_real_) {
-  if (!is.na(mean) && !is.na(sd)) {
-    low  <- round(mean - sd)
-    high <- round(mean + sd)
-    return(paste0(high, " vs ", low))
+# Clean continuous contrasts using 90th and 10th percentiles from predictor_stats_df
+clean_continuous_contrast <- function(contrast, q10 = NA_real_, q90 = NA_real_) {
+      #  Show the implied low/high values
+      low  <- round(q10)
+      high <- round(q90)
+      return(paste0(high, " vs ", low))
   }
-  as.character(contrast)
-}
 
 irr_results$weighted_summary |>
   dplyr::left_join(
@@ -428,7 +421,7 @@ irr_results$weighted_summary |>
     by = c("predictor" = "predictor_raw")
   ) |>
   dplyr::left_join(
-    predictor_stats_df |> dplyr::select(predictor, mean, sd),
+    predictor_stats_df |> dplyr::select(predictor, q10, q90),
     by = "predictor"
   ) |>
   dplyr::left_join(
@@ -444,18 +437,18 @@ irr_results$weighted_summary |>
       predictor
     ),
     contrast = dplyr::case_when(
-      type == "continuous" ~ clean_continuous_contrast(contrast, mean, sd),
+      type == "continuous" ~ clean_continuous_contrast(contrast, q10, q90),
       TRUE ~ clean_categorical_contrast(contrast, is_binary)
     ),
-    posterior_mean = round(posterior_mean, 2),
+    posterior_median = round(posterior_median, 2),
     ci_lower = round(ci_lower, 2),
     ci_upper = round(ci_upper, 2)
   ) |>
   dplyr::ungroup() |>
-  dplyr::select(predictor, contrast, posterior_mean, ci_lower, ci_upper) |>
+  dplyr::select(predictor, contrast, posterior_median, ci_lower, ci_upper) |>
   kable(
-    caption = "Posterior mean and 95% credible interval for population relative risks",
-    col.names = c("Predictor", "Contrast", "Posterior Mean", "95% CI Lower", "95% CI Upper"),
+    caption = "Posterior median and 95% credible interval for population relative risks",
+    col.names = c("Predictor", "Contrast", "Posterior Median", "95% CI Lower", "95% CI Upper"),
     align = "lcccc",
     booktabs = TRUE
   ) |>
@@ -468,15 +461,16 @@ irr_results$weighted_summary |>
 
 ## Individual attributable fractions
 
-We next consider individual and population attributable fractions. The individual attributable fraction measures how much of a person's estimated likelihood of being an autism case can be attributed to their own predictor profile rather than to a reference, low-likelihood profile.
+We next consider individual and population attributable fractions. The individual attributable fraction measures how much of a person’s predicted likelihood of autism is attributable to their predictor profile, relative to a reference profile that represents lower-risk values of the predictors.
 
-This target differs in two key ways from the causal likelihood ratios considered earlier. First, causal likelihood ratios compare two hypothetical values of a single predictor (e.g., "smoking" vs. "not smoking"), without regard to how common those values are in the population. Second, they vary one predictor at a time while holding everything else fixed. By contrast, we use attributable fractions to capture the joint contribution of all predictors $X$ at once, and express that contribution relative to a realistic baseline, defined by an empirically chosen reference profile.
+This differs from the individual relative risks considered earlier in two ways. First, individual relative risks are defined by comparing two fixed values of a single predictor (e.g., "exposed" vs. "unexposed"), without regard to how common those values are or where individuals lie in the distribution. As a result, they describe the strength of an association for a chosen contrast, but not how much that predictor contributes to the likelihood of autism in practice. Second, they vary one predictor at a time while holding all others fixed. This isolates effects, but does not capture how predictors combine to shape a person's overall risk. The attributable fraction addresses both limitations. It considers all predictors together, reflects how they are distributed in the population, and measures their contribution relative to a common baseline.
 
-Mathematically, the **individual attributable fraction** is defined as $$AF(X,Z) := \frac{\pi(X,Z)-\pi(x',Z)}
-{\pi(X,Z)},$$ where $\pi(x,z)=\Pr\big(Y(x)=1 \mid Z=z\big)$ is the probability of potential outcome $Y(x)$ for an individual with covariate profile $Z=z$. Here, $X$ represents the full vector of predictors of interest. In our implementation, $x'$ is chosen empirically as the set of predictors belonging to the individual in the analytic sample with the lowest predicted probability of autism under the fitted model. The numerator, $\pi(X, Z) - \pi(x’, Z)$, captures how much the probability of being a case would decrease if all predictors were set to this low-likelihood reference instead of the person’s observed predictor profile. The denominator rescales this change by the person's own predicted probability of being a case, yielding a proportion of their likelihood that is "attributable" to their deviation from the reference profile.
+The **individual attributable fraction** is defined as $$\mathrm{IAF}(x^*,X,Z) = \frac{\Pr\left( Y=1|X, Z\right) - \Pr\left( Y(x^*)=1|X, Z\right)}{\Pr\left( Y=1|X, Z\right)}.$$ In this case, $X$ represents the full vector of predictors of interest. The numerator is the counterfactual reduction in predicted probability that would occur if the individual's predictors were set to the reference profile $x^*$ instead of their observed values $X$, with $Z$ held fixed. The denominator is the predicted probability under the observed predictors. The attributable fraction therefore measures the proportional reduction in predicted risk under this counterfactual change.
 
-Because the attributable fraction can be written as one minus a causal likelihood ratio comparing the reference and observed predictor profiles, it can be estimated in parallel with the likelihood-ratio calculations. For each posterior draw $\theta^{(m)}$ from the fitted BART model, we compute $$1 - \frac{\widehat{\Pr}(Y=1 \mid X=x', Z, S=1; \theta^{(m)})/\widehat{\Pr}(Y=0 \mid X=x', Z, S=1; \theta^{(m)})}
-{\widehat{\Pr}(Y=1 \mid X, Z, S=1; \theta^{(m)})/\widehat{\Pr}(Y=0 \mid X, Z, S=1; \theta^{(m)})}$$ $$\widehat{\mathrm{AF}}(X,Z;\theta^{(m)}) \approx \mathrm{AF}(X,Z).$$ Operationally, for each posterior draw and each person, we use the fitted BART model to make two predictions: one where their predictors are set to the reference profile $x'$, and one where predictors remain at their observed values $X$, with covariates $Z$ always held fixed at their observed values. The ratio of these predicted odds defines a causal likelihood ratio comparing "reference" vs. "as observed"; one minus that ratio yields an estimate of the individual attributable fraction. Averaging $\widehat{AF}(X, Z; \theta^{(m)})$ over posterior draws gives the posterior mean attributable fraction for each person.
+The reference profile $x^*$ is constructed from the estimated population relative risks. For each predictor, we select a value associated with lower estimated risk: for continuous predictors, this is either the 10th or 90th percentile depending on whether the estimated relative risk is greater than or less than one; for categorical predictors, it is the level with the smallest estimated relative risk. If an individual has a missingness indicator equal to one for a given predictor, that predictor is left unchanged, since its value is not observed and cannot be modified. In this way, $x^*$ is assembled predictor by predictor to represent a systematically lower-risk configuration under the fitted model.
+
+Because the attributable fraction can be written as one minus a relative risk comparing the reference and observed predictor profiles, it can be estimated using similar posterior predictions as before. For each posterior draw $\theta^{(m)}$, we compute $$\widehat{\mathrm{IAF}}(x^*,X,Z)=1 - \frac{\widehat{\Pr}(Y=1 \mid X=x^*, Z, S=1; \theta^{(m)})/\widehat{\Pr}(Y=0 \mid X=x^*, Z, S=1; \theta^{(m)})}
+{\widehat{\Pr}(Y=1 \mid X, Z, S=1; \theta^{(m)})/\widehat{\Pr}(Y=0 \mid X, Z, S=1; \theta^{(m)})}.$$ Operationally, for each posterior draw and each individual, we use the fitted BART model to generate two predictions: one under the observed predictor profile $X$, and one under the reference profile $x^*$, with covariates $Z$ held fixed. We then form the odds ratio comparing the predicted odds under the reference profile to the predicted odds under the observed profile. Subtracting this quantity from one gives the model-based estimate of the individual attributable fraction. Repeating this calculation across posterior draws yields a posterior distribution for each individual, which we summarize by its median.
 
 ```{r}
 
@@ -484,41 +478,82 @@ Because the attributable fraction can be written as one minus a causal likelihoo
 af_results <- compute_attributable_fractions(
   bart_fit    = bart_fit,
   analytic_df = analytic_df,
-  config      = final_config
+  config      = final_config,
+  irr_results = irr_results,
+  predictor_stats_df
 )
 
 ```
 
-We plot a histogram to examine the distribution of posterior mean of these individual attributable fractions. Values near zero indicate people whose predictors are close to the low-risk reference, while larger positive values indicate that more of their predicted likelihood of being an autism case is explained by their specific predictor profile rather than baseline covariates.
+The low-risk reference profile used for the attributable fractions is shown below.
+```{r}
+label_map <- unlist(final_config$predictor_labels)
+
+ref_table <- af_results$ref_predictors |>
+  dplyr::mutate(
+    dplyr::across(where(is.numeric), ~ round(.x, 2)),
+    dplyr::across(everything(), as.character)
+  ) |>
+  tidyr::pivot_longer(
+    cols = everything(),
+    names_to = "predictor",
+    values_to = "reference_value"
+  ) |>
+  dplyr::mutate(
+    predictor = ifelse(
+      predictor %in% names(label_map),
+      unname(label_map[predictor]),
+      predictor
+    )
+  )
+
+knitr::kable(
+  ref_table,
+  col.names = c("Predictor", "Low-risk reference value"),
+  caption = "Constructed low-risk reference configuration used in the attributable fraction calculations.",
+  booktabs = TRUE,
+  align = c("l", "l")
+) |>
+  kableExtra::kable_styling(
+    full_width = FALSE,
+    position = "center",
+    bootstrap_options = c("striped", "hover")
+  )
+```
+
+We plot a histogram of the posterior medians of the individual attributable fractions. Values near zero correspond to individuals whose predictor profiles are close to the low-risk reference. Larger values indicate that a greater share of their predicted risk is tied to their specific predictors, rather than to baseline covariates.
 
 ```{r}
-# Plot posterior means of individual AFs
-plot_individual_af(af_results$af_summary_df,
+# Plot posterior medians of individual AFs
+plot_individual_af(af_results$af_median,
+                   af_results$paf_summary,
                    save_path = "outputs/individual_af_hist.png")
 ```
 
 ## Population attributable fraction
 
-While the individual attributable fraction measures how much of one person’s likelihood of being an autism case can be explained by their own predictors relative to a reference profile, the population attributable fraction (PAF) aggregates this idea across individuals to capture how much of the overall prevalence of autism in the study population could, in principle, be attributed to these predictors.
+While the individual attributable fraction measures how much of one person’s likelihood of being an autism case can be explained by their own predictors relative to a reference profile, the *population attributable fraction* aggregates this idea across individuals to capture how much of the overall prevalence of autism in the study population could, in principle, be attributed to these predictors.
 
-Formally, the population attributable fraction is defined as $$\mathrm{AF} =
-\frac{\Pr(Y=1) - \Pr(Y(x')=1)}{\Pr(Y=1)}.$$ The numerator measures the reduction in population risk that would occur if everyone's predictors were set to the reference profile x', while the denominator anchors this change to the observed population risk.
+Formally, the population attributable fraction is defined as $$\mathrm{PAF}(x^*) =
+\frac{\Pr(Y=1) - \Pr(Y(x^*)=1)}{\Pr(Y=1)}.$$ The numerator measures the reduction in population risk that would occur if everyone's predictors were set to the reference profile $x^*$, while the denominator anchors this change to the observed population risk.
 
-In practice, we can estimate the PAF by taking the sample average of individual attributable fractions among autism cases, $$\mathbb{E}_N\left[ \widehat{AF}(X,Z) \mid Y=1, S=1 \right] = \widehat{\mathrm{AF}} \approx \mathrm{AF}$$ which follows, perhaps unexpectedly, from a change-of-variables argument described in the Technical Appendix.
+In practice, we can estimate the PAF by taking the sample average of individual attributable fractions among autism cases, $$\mathrm{PAF}=\mathbb{E}[\mathrm{IAF}(x^*,X,Z) \mid Y=1, S=1] \approx \mathbb{E}_N\left[ \widehat{\mathrm{IAF}}(x^*,X,Z) \mid Y=1, S=1 \right],$$ which follows, perhaps unexpectedly, from a change-of-variables argument described in the protocol.
 
 ```{r}
 #| label: tbl-paf
-#| tbl-cap: "Posterior mean and 95% credible interval for the population attributable fraction"
+#| tbl-cap: "Posterior median and 95% credible interval for the population attributable fraction"
 
 af_results$paf_summary |>
+  dplyr::select(posterior_median, ci_lower, ci_upper) |>
   dplyr::mutate(
-    across(where(is.numeric), ~round(.x, 3))
+    across(where(is.numeric), ~round(.x, 2))
   ) |>
   knitr::kable(
-    caption = "Posterior mean and 95% credible interval for the population attributable fraction",
-    col.names = c("Posterior Mean", "95% CI Lower", "95% CI Upper"),
+    caption = "Posterior median and 95% credible interval for the population attributable fraction",
+    col.names = c("Posterior Median", "95% CrI Lower", "95% CrI Upper"),
     align = "ccc",
-    booktabs = TRUE
+    booktabs = TRUE,
+    row.names = FALSE
   ) |>
   kableExtra::kable_styling(
     full_width = FALSE,
@@ -527,30 +562,32 @@ af_results$paf_summary |>
   )
 ```
 
-## Individual Shapley decomposition
+## Importance measures
 
-To understand how individual predictors contribute to that the individual, we adapt the idea of Shapley values from cooperative game theory, an approach widely used in explainable AI. In this framework, the attributable fraction is expressed as an additive sum of contributions from each predictor, $$AF(X, Z) = \phi_0(X,Z) + \phi_1(X, Z) + \phi_p(X,Z),$$ where $\phi_0(X,Z)$ is a baseline term and each $\phi_j(X, Z)$ represents the fair contribution of predictor $j$ to the individual's attributable fraction.
+To explain how each predictor contributes to that the attributable fractions, we adapt the idea of Shapley values from cooperative game theory, an approach widely used in explainable AI. In this framework, the individual attributable fraction is expressed as an additive sum of contributions from each predictor, $$\mathrm{IAF}(x^*,X, Z) = \phi_0(x^*,X,Z) + \phi_1(x^*,X, Z) + \phi_p(x^*,X,Z),$$ where $\phi_0(x^*,X,Z)$ is a baseline term and each $\phi_j(x^*,X, Z)$ represents the fair contribution of predictor $j$ to the individual's attributable fraction.
 
-These contributions (called *Shapley values*) are computed by averaging how much each predictor in $X$ contributes to $AF(X, Z)$ when added to subsets of other predictors. These subsets are formed by randomly ordering the predictors and sequentially adding them, evaluating how the attributable fraction shifts at each step. Predictors not yet added are filled in with values drawn from random "donor" individuals, providing realistic replacements that reflect population variability. By averaging these incremental changes over many random orderings, we obtain a fair and order-independent decomposition of $AF(X, Z)$ into Shapley values.
+These contributions (called *Shapley values*) are computed by averaging how much each predictor in $X$ contributes to $\mathrm{IAF}(x^*,X, Z)$ when added to subsets of other predictors. These subsets are formed by randomly ordering the predictors and sequentially adding them, evaluating how the attributable fraction shifts at each step. Predictors not yet added are filled in with values drawn from random "donor" individuals, providing realistic replacements that reflect population variability. By averaging these incremental changes over many random orderings, we obtain a fair and order-independent decomposition of $\mathrm{IAF}(x^*,X, Z)$ into Shapley values.
 
 ```{r}
 af_shapley <- compute_shapley_af(
   bart_fit = bart_fit,
   analytic_df = analytic_df,
   config = final_config,
-  ref_index = af_results$ref_index,
-  n_individuals = 50,
-  n_samples = 100,
-  n_donors = 100
+  p_ref = af_results$p_ref,
+  n_individuals = 200,
+  n_samples = 50,
+  n_donors = 50,
+  n_cores = 6
 )
 ```
 
-The beeswarm plots visualize the Shapley values across individuals, showing how each predictor increases or decreases the attributable fraction for different people. Each point represents one person’s Shapley value for a given predictor, with color indicating the person’s predictor value. The horizontal spread reflects the variability in each predictor’s contribution—wider spreads signal predictors whose effects differ more across individuals. Positive Shapley values indicate predictors that increase a person’s attributable fraction (raising their estimated likelihood relative to the reference profile), while negative values indicate predictors that lower it.
+Beeswarm plots visualize the Shapley values across individuals, showing how each predictor increases or decreases the attributable fraction for different people. Each point represents one person’s Shapley value for a given predictor, with color indicating the person’s predictor value. The horizontal spread reflects the variability in each predictor’s contribution: wider spreads signal predictors whose effects differ more across individuals. Positive Shapley values indicate predictors that increase a person’s attributable fraction (raising their estimated likelihood relative to the reference profile), while negative values indicate predictors that lower it.
 
 ```{r}
 af_shapley_plot <- plot_shapley_beeswarm(
-  af_shapley        = af_shapley$individual,
+  af_shapley        = af_shapley$individual_feature_shapley,
   analytic_df       = analytic_df,
+  config            = final_config,
   predictor_stats_df = predictor_stats_df,
   save_path         = "outputs/shapley_beeswarm.png",
   save_path_vertical = "outputs/shapley_beeswarm_vertical.png"
@@ -561,20 +598,21 @@ af_shapley_plot <- plot_shapley_beeswarm(
 
 ## Population Shapley decomposition
 
-Just as the population attributable fraction is defined as the average of individual attributable fractions among autism cases, the population Shapley values are obtained by averaging individual Shapley contributions across those same cases. If $$AF(X, Z) = \phi_0(X,Z) + \phi_1(X, Z) + \phi_p(X,Z),$$ then the population-level decomposition is $$AF = \bar{\phi}_0 + \sum_j \bar{\phi}_j,$$ where each $\bar{\phi}_j$ is the average contribution of predictor $j$ across all cases. These averaged contributions represent how much each predictor explains, on average, of the total population attributable fraction.
+Just as the population attributable fraction is defined as the average of individual attributable fractions among autism cases, the population Shapley values are obtained by averaging individual Shapley contributions across those same cases. If $$\mathrm{IAF}(x^*,X, Z) = \phi_0(x^*,X,Z) + \phi_1(x^*,X, Z) + \phi_p(x^*,X,Z),$$ then the population-level decomposition is $$\mathrm{PAF}(x^*) = \bar{\phi}_0(x^*) + \bar{\phi}_1(x^*) + \bar{\phi}_p(x^*),$$ where each $\bar{\phi}_j(x^*)$ is the average contribution of predictor $j$ across all cases. These averaged contributions represent how much each predictor explains, on average, of the total population attributable fraction.
 
 The table below reports the posterior mean and 95% credible intervals for each predictor's population-level Shapley value, summarizing the overall importance of each factor in shaping the likelihood of autism across the population.
 
 ```{r}
-af_shapley$population |>
+af_shapley$population_feature_shapley |>
+  dplyr::select(median_shapley, lower, upper, n_cases_used) |>
   dplyr::mutate(
-    mean_shapley = round(mean_shapley, 3),
+    median_shapley = round(median_shapley, 3),
     lower        = round(lower, 3),
     upper        = round(upper, 3)
   ) |>
   knitr::kable(
-    caption = "Posterior mean and 95% credible interval for population-level Shapley values",
-    col.names = c("Predictor", "Posterior Mean", "95% CI Lower", "95% CI Upper", "Cases Used"),
+    caption = "Posterior median and 95% credible interval for population-level Shapley values",
+    col.names = c("Predictor", "Posterior Median", "95% CI Lower", "95% CI Upper", "Cases Used"),
     align = "lcccc",
     booktabs = TRUE
   ) |>

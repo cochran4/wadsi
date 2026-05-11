@@ -14,8 +14,6 @@ predictors:
     type: continuous
   - name: bp_treated          # Blood pressure medication use (yes/no)
     type: categorical
-  - name: race                # Self-reported race
-    type: categorical
 
 # Covariates (adjustment variables)
 # Included in all models to control for confounding
@@ -23,6 +21,8 @@ covariates:
   - name: age
     type: continuous
   - name: sex
+    type: categorical
+  - name: race                # Self-reported race
     type: categorical
 
 # Outcome variable
@@ -35,7 +35,7 @@ outcome:
 # Missingness indicators
 # For each variable listed, create a binary indicator for missing values
 missingness_indicators:
-  - bp_treated
+  - smoker_current
 
 # -------------------------------------------------------------------------
 # Population outcome probabilities
@@ -44,8 +44,8 @@ missingness_indicators:
 #   and may differ from the observed sample proportions.
 # -------------------------------------------------------------------------
 population_priors:
-  pY1: 0.02   # Example: 2% cases in the target population
-  pY0: 0.98   # Complement
+  pY1: 0.032   # Example: 3.2% cases in the target population
+  pY0: 0.968   # Complement
 
 # Display labels used in plots and tables
 predictor_labels:
@@ -54,4 +54,3 @@ predictor_labels:
   hdl_c: "HDL cholesterol, mg/dL"
   tot_chol: "Total cholesterol, mg/dL"
   bp_treated: "Blood pressure medication"
-  race: "Race"

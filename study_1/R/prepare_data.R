@@ -7,7 +7,7 @@
 #     1. Keeps only predictors, covariates, and the outcome.
 #     2. Coerces variables to the correct type (numeric or factor).
 #     3. Converts the outcome to 0/1 only if categorical (for modeling).
-#     4. Computes mean and SD for continuous predictors.
+#     4. Computes mean, SD, and an interpercentile range for continuous predictors.
 #     5. Returns both the processed dataset and summary statistics.
 #
 # Design choice:
@@ -21,11 +21,13 @@
 #       * predictors: list of lists with elements 'name' and 'type'
 #       * covariates: list of lists with elements 'name' and 'type'
 #       * outcome: list with elements 'name', 'type', and 'reference' (if categorical)
+#   - lower_prob: lower percentile for interpercentile range (default 0.10)
+#   - upper_prob: upper percentile for interpercentile range (default 0.90)
 #
 # Output:
 #   A list containing:
 #       * coerced_df: coerced analytic dataset
-#       * predictor_stats_df: mean and SD for continuous predictors
+#       * predictor_stats_df: mean, SD, and interdecile range
 #
 # Example usage:
 #   result <- coerce_variable_types(raw_df, config)
@@ -33,7 +35,6 @@
 #   result$predictor_stats_df
 #
 # -----------------------------------------------------------------------------
-
 coerce_variable_types <- function(raw_df, config) {
 
   # Variables used in the analysis
@@ -91,12 +92,17 @@ coerce_variable_types <- function(raw_df, config) {
   continuous_predictors <- continuous_predictors[types == "continuous"]
   
   # Compute mean and SD for continuous predictors
+  # Labels for percentile columns
+  lower_label <- "10th_percentile"
+  upper_label <- "90th_percentile"
   predictor_stats_df <- if (length(continuous_predictors) > 0) {
     do.call(rbind, lapply(continuous_predictors, function(v) {
       data.frame(
         predictor = v,
         mean = mean(coerced_df[[v]], na.rm = TRUE),
-        sd = sd(coerced_df[[v]], na.rm = TRUE)
+        sd = sd(coerced_df[[v]], na.rm = TRUE),
+        q10 = quantile(coerced_df[[v]], probs = c(.10), na.rm = TRUE),
+        q90 = quantile(coerced_df[[v]], probs = c(.90), na.rm = TRUE)
       )
     }))
   } else {
