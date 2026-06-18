@@ -8,3 +8,4 @@ A research poster was presented at the 2026 Society for Causal Inference Confere
      alt="ADSI team member presenting a research poster at the 2026 Society for Causal Inference Conference in Salt Lake City, Utah."
      title="Poster presentation at the 2026 Society for Causal Inference Conference"
      width="50%">
+*Rachel Hanger presenting a research poster at the 2026 Society for Causal Inference Conference. (photo credit: Anna Pham)*
