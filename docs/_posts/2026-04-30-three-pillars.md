@@ -12,5 +12,5 @@ Data science allows us to make use of large and complex sources of information, 
 <img src="{{ 'images/3pillars1.png' | relative_url }}"
      alt="Triangle diagram illustrating the three pillars of the ADSI research approach. Data Science contributes data, analytics, and causal models; Public Health contributes understanding of population patterns, resources, and health systems; and Community Engagement contributes lived experience, partnerships, and Community Advisory Board input. Together, these pillars support autism research."
      title="How ADSI Approaches Autism Research"
-     width="50%">
+     width="75%">
 *UW-Madison ADSI brings together data science, public health, and community engagement to support rigorous, community-informed autism research.*
