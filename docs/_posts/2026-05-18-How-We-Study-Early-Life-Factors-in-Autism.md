@@ -12,6 +12,6 @@ A research poster was presented at the 2026 Society for Causal Inference Confere
        style="display:block; margin:auto;">
 </div>
 
-<div style="width:50%; margin:12px auto 0 auto; text-align:center; font-size:0.9em;">
+<div style="width:75%; margin:12px auto 0 auto; text-align:center; font-size:0.9em;">
   <em>Rachel Hanger presenting a research poster at the 2026 Society for Causal Inference Conference. (Photo credit: Anna Pham.)</em>
 </div>
