@@ -17,6 +17,6 @@ Data science allows us to make use of large and complex sources of information, 
        style="display:block; margin:auto;">
 </div>
 
-<div style="width:75%; margin:0 auto; text-align:center; font-size:0.9em;">
+<div style="width:85%; margin:0 auto; text-align:center; font-size:0.9em;">
   <em>UW–Madison ADSI brings together data science, public health, and community engagement to support rigorous, community-informed autism research.</em>
 </div>
