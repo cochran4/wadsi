@@ -1,0 +1,2 @@
+allocation,chains,burnin_per_chain,retained_per_chain,total_retained,total_iterations,elapsed_seconds
+12 shorter chains,12,16667,2000,24000,224004,1158.454

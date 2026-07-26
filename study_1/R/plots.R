@@ -6,7 +6,8 @@
 #     Top/Left    = Continuous predictors
 #     Bottom/Right = Categorical predictors
 #
-#   Each dot represents one person's posterior median individual relative risk.
+#   Each dot represents a posterior median conditional relative risk for an
+#   observed covariate profile.
 #   The x-axis is shown on a log2 scale. Dots are colored-filled circles with
 #   white outlines, and violins summarize the distribution within each
 #   predictor-contrast pair.
@@ -138,7 +139,7 @@ plot_individual_rr <- function(irr_summary_df,
     "#D55E00", "#56B4E9", "#F0E442", "#999999"
   )
   # --- Define a common x-axis for both panels ---
-  # Compute the overall range of individual relative risks across all predictors
+  # Compute the overall range of conditional relative risks across predictors
   x_range <- range(irr_summary_df$posterior_median_irr, na.rm = TRUE)
   
   # Add a small padding so points/violins do not sit on the plot boundaries
@@ -163,7 +164,7 @@ plot_individual_rr <- function(irr_summary_df,
     ggplot2::ggplot(
       df,
       ggplot2::aes(
-        x = posterior_median_irr,                        # x-axis: individual relative risk
+        x = posterior_median_irr,                        # x-axis: conditional relative risk
         y = forcats::fct_rev(factor(display_label)),     # y-axis: predictor + contrast (top-to-bottom)
         fill = predictor_label                           # fill used for grouping (not shown in legend)
       )
@@ -178,7 +179,7 @@ plot_individual_rr <- function(irr_summary_df,
       ) +
       
       # --- Distribution layer (violin) ---
-      # Shows spread of individual relative risks within each predictor/contrast
+      # Shows the spread of conditional relative risks within each contrast
       ggplot2::geom_violin(
         ggplot2::aes(group = display_label),
         fill = "gray90",
@@ -188,8 +189,8 @@ plot_individual_rr <- function(irr_summary_df,
         alpha = 0.7
       ) +
       
-      # --- Individual estimates (points) ---
-      # Each dot is one person's posterior median IRR
+      # --- Profile-specific estimates (points) ---
+      # Each dot is a posterior median CRR for one observed covariate profile
       ggplot2::geom_point(
         shape = 21,
         color = "white",
@@ -213,7 +214,7 @@ plot_individual_rr <- function(irr_summary_df,
       
       # --- Labels and titles ---
       ggplot2::labs(
-        x = "Individual relative risk",
+        x = "Conditional relative risk",
         y = NULL,
         title = title
       ) +
@@ -519,7 +520,7 @@ plot_shapley_beeswarm <- function(af_shapley,
 # plot_individual_af.R
 #
 # Description:
-#   Histogram of individual attributable fractions (IAF), where all values
+#   Histogram of conditional attributable fractions (CAF), where all values
 #   below zero are grouped into a single "< 0" bin.
 #
 #   Values on [0, 1] are shown using regular-width bins. The population
@@ -528,7 +529,7 @@ plot_shapley_beeswarm <- function(af_shapley,
 #     - a horizontal segment showing the 95% credible interval
 #
 # Inputs:
-#   af_median   : numeric vector of posterior median IAFs
+#   af_median   : numeric vector of posterior median CAFs
 #   paf_summary : list or data frame with:
 #       - posterior_median
 #       - ci_lower
@@ -600,7 +601,7 @@ plot_individual_af <- function(af_median, paf_summary, save_path = NULL) {
       name = NULL
     ) +
     ggplot2::labs(
-      x = "Individual attributable fraction",
+      x = "Conditional attributable fraction",
       y = "Count, persons"
     ) +
     

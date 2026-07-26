@@ -1,0 +1,5 @@
+software,negative_log_probability
+BART,0.52215159182476
+dbarts::bart,0.5362943982534816
+dbarts::bart2,0.47742437507988167
+flexBART,0.5337361625475798

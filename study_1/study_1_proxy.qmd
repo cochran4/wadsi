@@ -1,0 +1,111 @@
+---
+title: "Proxy-variable analysis for study 1"
+author: "Amy Cochran"
+format:
+  html:
+    css: style.css
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+editor: visual
+execute:
+  echo: true
+  warning: false
+  message: false
+  seed: 20260322
+---
+
+# Proxy-variable analysis
+
+This document is a separate workspace for developing the proxy-variable
+analysis. It is not sourced by `study_1_sensitivity.qmd` and therefore does not
+affect the completed sensitivity analyses or their render.
+
+The initial implementation is restricted to a genuinely binary focal
+predictor, $X$. The remaining variables in the adjustment set are denoted by
+$Z$, and $U$ is a continuous latent proxy with unit variance. We fit
+
+$$
+\Pr(X=1\mid Z)=\Phi\{f_X(Z)\},
+$$
+
+$$
+U\mid X,Z \sim \operatorname{BART},
+\qquad \operatorname{Var}(U)=1,
+$$
+
+and
+
+$$
+\Pr(Y=1\mid X,U)=\Phi\{f_Y(X,U)\}.
+$$
+
+Probit BART estimates $f_X$ and $f_Y$, and Gaussian BART estimates $f_U$.
+During model fitting, $U$ is updated conditional on each participant's observed
+$X$ and $Z$.
+
+## Counterfactual risks
+
+For a contrast of $x$ with $x'$, define four conditional expectations:
+
+$$
+M_{x\mid x}(z)
+=E[E(Y\mid X=x,U)\mid X=x,Z=z],
+$$
+
+$$
+M_{x\mid x'}(z)
+=E[E(Y\mid X=x,U)\mid X=x',Z=z],
+$$
+
+$$
+M_{x'\mid x}(z)
+=E[E(Y\mid X=x',U)\mid X=x,Z=z],
+$$
+
+and
+
+$$
+M_{x'\mid x'}(z)
+=E[E(Y\mid X=x',U)\mid X=x',Z=z].
+$$
+
+Let
+
+$$
+\pi_x(z)=\Pr(X=x\mid Z=z),
+\qquad
+\pi_{x'}(z)=1-\pi_x(z).
+$$
+
+The two counterfactual outcome risks conditional on $Z$ are
+
+$$
+E\{Y(x)\mid Z=z\}
+=\pi_x(z)M_{x\mid x}(z)
++\pi_{x'}(z)M_{x\mid x'}(z)
+$$
+
+and
+
+$$
+E\{Y(x')\mid Z=z\}
+=\pi_x(z)M_{x'\mid x}(z)
++\pi_{x'}(z)M_{x'\mid x'}(z).
+$$
+
+Each $M$ term is integrated over draws from the corresponding fitted
+$U\mid X,Z$ distribution. The resulting two risks enter the same population
+relative-risk calculation used in the primary analysis.
+
+## Code setup
+
+```{r}
+source("R/imports.R")
+
+set.seed(20260322)
+```
+
+The joint BART Gibbs sampler will be added and reviewed here before a proxy
+model is run. Continuous and multi-level categorical focal predictors are
+outside the scope of the initial implementation.

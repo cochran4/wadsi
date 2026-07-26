@@ -5,6 +5,10 @@ source("R/prepare_data.R")
 source("R/compute_effects.R")
 source("R/model_diagnostics.R")
 source("R/plots.R")
+source("R/sensitivity/compare_bart_software.R")
+source("R/sensitivity/cross_validation.R")
+source("R/sensitivity/sens_unmeas_conf.R")
+source("R/sensitivity/proxy_models.R")
 
 # Toggle automatic installation of missing packages
 INSTALL_MISSING <- TRUE
@@ -13,15 +17,19 @@ INSTALL_MISSING <- TRUE
 pkgs <- c(
   "tidyverse",
   "bartCause",
+  "BART",
   "dbarts",
+  "flexBART",
+  "posterior",
   "yaml",
   "mice",
-  "coda",
   "knitr",
   "officer",
   "flextable",
   "kableExtra",
   "patchwork",
+  "cowplot",
+  "grid",
   "iml",
   "ggbeeswarm"
 )
