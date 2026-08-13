@@ -7,12 +7,17 @@ autism and the factors that shape autistic people's lives.
 
 ## Study 1
 
-The `study_1/` directory contains the reproducible analysis workflow for the
-first study. The analysis uses Bayesian additive regression trees (BART) to
+The `study_1/` directory contains the developing analysis workflow for the
+first study. The workflow uses Bayesian additive regression trees (BART) to
 estimate individual- and population-level measures of association and
-attributable fractions. It also contains pilot sensitivity analyses examining
-BART implementation, MCMC configuration, predictive performance, and
-unmeasured confounding.
+attributable fractions. It also contains sensitivity analyses examining BART
+implementation, MCMC configuration, predictive performance, and unmeasured
+confounding.
+
+> **Pilot status:** The currently rendered reports use public NHANES data with
+> diabetes as the outcome to test the analysis workflow. They do not use SEED
+> data and do not report results about autism. The language describing the
+> scientific aims anticipates the future SEED analysis.
 
 Rendered reports:
 
@@ -31,9 +36,10 @@ The corresponding Quarto source files are
   rendered reports
 - `old/`: archived project files
 
-Study data and fitted models derived from study data are not included in the
-repository. Rendered reports are provided for transparency and can be viewed
-without downloading the repository or running the analyses.
+SEED study data and fitted models derived from those data are not included in
+the repository. The current rendered reports contain results from the public
+NHANES pilot analysis and can be viewed without downloading the repository or
+running the analyses.
 
 ## Website
 

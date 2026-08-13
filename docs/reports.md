@@ -4,9 +4,14 @@ title: Rendered analyses
 permalink: /reports/
 ---
 
-The following Quarto reports provide browsable versions of the WADSI analysis
-workflows. They include the displayed code and nonconfidential results but not
-the underlying study data or saved fitted models.
+The following Quarto reports provide browsable versions of the developing
+WADSI analysis workflows.
+
+**Pilot status:** These reports currently use public NHANES data with diabetes
+as the outcome to test the workflow. They do not use SEED data and do not
+report results about autism. The scientific framing anticipates the future SEED
+analysis. The reports include displayed code and pilot results but not the
+underlying dataset or saved fitted models.
 
 - [Study 1 analysis]({{ site.baseurl }}/reports/study_1.html)
 - [Study 1 sensitivity analyses]({{ site.baseurl }}/reports/study_1_sensitivity.html)

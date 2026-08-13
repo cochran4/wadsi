@@ -8,7 +8,7 @@
 
 <meta name="author" content="Amy Cochran">
 
-<title>Causal inference / SEED</title>
+<title>Study 1 analysis workflow — NHANES pilot</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -142,7 +142,8 @@ window.Quarto = {
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Causal inference / SEED</h1>
+<h1 class="title">Study 1 analysis workflow</h1>
+<p class="subtitle lead">Pilot analysis using public NHANES data</p>
 </div>
 
 
@@ -167,6 +168,10 @@ window.Quarto = {
 
 <section id="introduction" class="level1">
 <h1>Introduction</h1>
+<div class="callout callout-style-default callout-important callout-titled">
+<div class="callout-header d-flex align-content-center"><div class="callout-icon-container"><i class="callout-icon"></i></div><div class="callout-title-container flex-fill">Pilot analysis</div></div>
+<div class="callout-body-container callout-body"><p>This rendered document currently uses public NHANES data with diabetes as the outcome to test the analysis workflow. It does not use SEED data and does not report results about autism. The scientific framing below anticipates the future SEED analysis.</p></div>
+</div>
 <p>We study how early-life factors influence the likelihood of autism using data from the Study to Explore Early Development (SEED). We proceed one factor at a time, which we denote by <span class="math inline">\(X\)</span>. The outcome, autism status, is denoted by <span class="math inline">\(Y\)</span>. The remaining early-life factors are denoted by <span class="math inline">\(Z\)</span> and include both the other predictors we care about and other variables that may confound the relationship For each choice in <span class="math inline">\(X\)</span>, we compare what happens when that factor changes, while holding fixed a common set of other early-life variables. For instance, when examining maternal age, we also adjust for paternal age and related perinatal factors that are related to maternal age and autism. Using the same adjustment set throughout keeps the comparisons consistent: every effect is defined within the same causal framework.</p>
 <p>Our goal is to make causal statements. Not just associations, but answers to questions like what would happen if a predictor were set to one value rather than another? We formalize this through two contrasts. The first is a <strong>conditional relative risk</strong>: for a given covariate profile <span class="math inline">\(Z=z\)</span>, how would the likelihood of autism change if we set the predictor to <span class="math inline">\(x\)</span> instead of <span class="math inline">\(x'\)</span>? The second is a <strong>population relative risk</strong>: how would the overall likelihood of autism change if we made that same shift for everyone?</p>
 <p>To define these quantities, we need a model of how the data arise. We use a structural model that encodes the relationships among variables in SEED. One complication is that SEED is a case–control study; it oversamples autism cases. To account for this, we introduce a sampling indicator <span class="math inline">\(S\)</span>, which separates the sampled data from the underlying population. The causal quantities we seek live in that population, not just in the sample we observe.</p>
