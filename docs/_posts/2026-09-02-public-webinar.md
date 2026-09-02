@@ -15,15 +15,15 @@ The webinar recording is available through NIH VideoCast:
 <a href="https://videocast.nih.gov/watch/26657e7a-8b5f-11f1-82c0-124f0a52e769" target="_blank" rel="noopener noreferrer"><strong>Watch the NIH ADSI Public Webinar</strong></a>
 
 <div style="width:75%; margin:2em auto 0;">
-  <img src="{{ 'images/Helen.png' | relative_url }}"
+  <img src="{{ 'images/helen.png' | relative_url }}"
        alt="Helen Rottier participating in the NIH Autism Data Science Initiative public webinar."
        style="display:block; width:100%; height:auto; margin:0 auto 1.5em;">
 
-  <img src="{{ 'images/Aracely.png' | relative_url }}"
+  <img src="{{ 'images/aracely.png' | relative_url }}"
        alt="Aracely Portillo participating in the NIH Autism Data Science Initiative public webinar."
        style="display:block; width:100%; height:auto; margin:0 auto 1.5em;">
 
-  <img src="{{ 'images/Causalinf.png' | relative_url }}"
+  <img src="{{ 'images/causalinf.png' | relative_url }}"
        alt="Presentation from the UW–Madison Autism Data Science Initiative project during the NIH public webinar."
        style="display:block; width:100%; height:auto; margin:0 auto;">
 </div>
