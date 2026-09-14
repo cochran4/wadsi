@@ -10,7 +10,7 @@ We are using causal inference to examine these relationships more carefully. Rat
 Causal inference does not turn observational research into a randomized experiment or provide simple proof of cause and effect. Instead, it provides a more structured and transparent way to investigate causal questions. By making assumptions explicit and open to examination, we hope to strengthen both the evidence we produce and the conversation about what that evidence can—and cannot—tell us.
 
 <div style="text-align:center; margin-top:2em;">
-  <img src="{{ 'images/associations-evidence.png' | relative_url }}"
+  <img src="{{ 'images/associations-evidence1.png' | relative_url }}"
        alt="Illustration showing the distinction between observed associations and stronger causal evidence in autism research."
        title="From Associations to Stronger Evidence"
        width="60%"
