@@ -13,7 +13,7 @@ Through ADSI, we are building on the depth of SEED by applying modern causal inf
   <img src="{{ 'images/SEED.png' | relative_url }}"
        alt="Illustration highlighting features of CDC's Study to Explore Early Development that support causal inference research in autism."
        title="Learning from SEED"
-       width="75%"
+       width="50%"
        style="display:block; margin:auto;">
 </div>
 
