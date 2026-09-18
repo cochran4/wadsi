@@ -13,7 +13,7 @@ Causal inference does not turn observational research into a randomized experime
   <img src="{{ 'images/associations-evidence2.png' | relative_url }}"
        alt="Illustration showing the distinction between observed associations and stronger causal evidence in autism research."
        title="From Associations to Stronger Evidence"
-       width="60%"
+       width="50%"
        style="display:block; margin:auto;">
 </div>
 
