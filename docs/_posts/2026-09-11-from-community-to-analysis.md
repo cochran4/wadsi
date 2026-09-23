@@ -10,7 +10,7 @@ But selecting what to study is only part of the research process. How do we use 
 Over the next several posts, we will take a closer look at the research strategy behind ADSI—from our use of causal inference, to what we can learn from SEED and linked Wisconsin health and birth records, to how these pieces work together.
 
 <div style="text-align:center; margin:2em 0;">
-  <img src="{{ 'images/blogseries.png' | relative_url }}"
+  <img src="{{ 'images/blogseries1.png' | relative_url }}"
        alt="Overview of the ADSI blog series, moving from community priorities and data analysis through causal inference, SEED, linked health and birth records, and bringing the different sources and approaches together."
        title="From Community Priorities to Data Analysis: ADSI Blog Series"
        width="100%"
