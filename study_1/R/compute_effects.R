@@ -471,7 +471,7 @@ compute_shapley_af <- function(bart_fit,
   # Helper: posterior predicted probabilities, clipped away from 0 and 1
   # to avoid instability in ratios such as p_ref / p_obs.
   get_probs <- function(fit, newdata, eps = 1e-6) {
-    p <- predict(fit, newdata = newdata)   # draws x nrow(newdata)
+    p <- stats::predict(fit, newdata = newdata)   # draws x nrow(newdata)
     pmin(pmax(p, eps), 1 - eps)
   }
   
@@ -645,20 +645,45 @@ compute_shapley_af <- function(bart_fit,
   # Each sampled individual can be processed independently, so the natural
   # place to parallelize is over k = 1, ..., length(idx).
   #
-  # On macOS, parallel::mclapply() works and is convenient. When n_cores = 1,
-  # we fall back to lapply() for easier debugging and reproducibility.
+  # Socket workers support Windows as well as macOS/Linux. Load dbarts on
+  # each worker so its prediction method is registered for the serialized fit.
+  # With one core, use lapply() for easier debugging.
   # ---------------------------------------------------------------------------
-  
-  if (n_cores > 1L) {
-    results_list <- parallel::mclapply(
+
+  if (length(n_cores) != 1L || !is.numeric(n_cores) ||
+      is.na(n_cores) || !is.finite(n_cores) ||
+      n_cores < 1 || n_cores != floor(n_cores)) {
+    stop("n_cores must be a positive integer.")
+  }
+  n_workers <- min(n_cores, length(idx))
+
+  if (n_workers > 1L) {
+    # Resolve arguments before serialization: their promises can refer to
+    # objects in the calling session that do not exist on socket workers.
+    worker_env <- list2env(list(
+      bart_fit = bart_fit, idx = idx, p_ref_draws_sel = p_ref_draws_sel,
+      X_df = X_df, Z_df = Z_df, y_vec = y_vec,
+      n_donors = n_donors, n_draws = n_draws, n_pred = n_pred,
+      player_names = player_names, n_samples = n_samples, n_obs = n_obs,
+      get_probs = get_probs
+    ), parent = asNamespace("stats"))
+    environment(worker_env$get_probs) <- baseenv()
+    environment(compute_one_individual) <- worker_env
+
+    cl <- parallel::makePSOCKcluster(n_workers)
+    on.exit(parallel::stopCluster(cl), add = TRUE)
+    parallel::clusterEvalQ(cl, loadNamespace("dbarts"))
+    # Derive independent worker RNG streams from the notebook's set.seed().
+    parallel::clusterSetRNGStream(cl, iseed = sample.int(.Machine$integer.max, 1L))
+    results_list <- parallel::parLapply(
+      cl = cl,
       X = seq_along(idx),
-      FUN = compute_one_individual,
-      mc.cores = n_cores
+      fun = compute_one_individual
     )
   } else {
     results_list <- lapply(seq_along(idx), compute_one_individual)
   }
-  
+
   # ---------------------------------------------------------------------------
   # 7. Combine individual-level results
   # ---------------------------------------------------------------------------

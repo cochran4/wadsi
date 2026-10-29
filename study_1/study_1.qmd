@@ -601,7 +601,7 @@ af_shapley <- compute_shapley_af(
   n_individuals = 200,
   n_samples = 50,
   n_donors = 50,
-  n_cores = 6
+  n_cores = 6 # Socket workers support Windows and macOS
 )
 ```
 
