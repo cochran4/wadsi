@@ -431,10 +431,17 @@ clean_categorical_contrast <- function(x, is_binary) {
 }
 
 # Clean continuous contrasts using 90th and 10th percentiles from predictor_stats_df
-clean_continuous_contrast <- function(contrast, q10 = NA_real_, q90 = NA_real_) {
-      #  Show the implied low/high values
-      low  <- round(q10)
-      high <- round(q90)
+clean_continuous_contrast <- function(contrast, q10 = NA_real_, q90 = NA_real_,
+                                        predictor = "") {
+      # Show two decimals for polygenic risk; keep other labels as integers.
+      is_polygenic <- grepl("polygenic|^(prs|pgs)$", predictor, ignore.case = TRUE)
+      if (is_polygenic) {
+        low  <- sprintf("%.2f", q10)
+        high <- sprintf("%.2f", q90)
+      } else {
+        low  <- round(q10)
+        high <- round(q90)
+      }
       return(paste0(high, " vs ", low))
   }
 
@@ -460,7 +467,7 @@ irr_results$weighted_summary |>
       predictor
     ),
     contrast = dplyr::case_when(
-      type == "continuous" ~ clean_continuous_contrast(contrast, q10, q90),
+      type == "continuous" ~ clean_continuous_contrast(contrast, q10, q90, predictor),
       TRUE ~ clean_categorical_contrast(contrast, is_binary)
     ),
     posterior_median = round(posterior_median, 2),
@@ -645,4 +652,78 @@ af_shapley$population_feature_shapley |>
     position = "center",
     bootstrap_options = c("striped", "hover")
   )
+```
+
+# CAB-motivated interpretations of the fitted model
+
+::: callout-important
+## Contrasts specified after protocol acceptance
+
+The contrasts presented in this section were specified in response to Community Advisory Board (CAB) input after the protocol was accepted for publication. These particular comparisons were not specified in the accepted protocol. They use the same fitted model and do not change the model specification or replace the protocol-specified results.
+:::
+
+The CAB asked how factors “stack” together and how selected combinations compare with their absence. We address these questions through joint exposure contrasts, providing different ways to interpret the same fitted model.
+
+```{r}
+# Load the joint-contrast helper; reuse the model fitted above.
+source("R/joint_contrasts.R")
+```
+
+## Questions motivating the SEED contrasts
+
+The CAB asked how factors “stack” when they occur together. We address this through joint comparisons for selected groups and for all nine predictors together. All predictors in a group are changed simultaneously; these are separate comparisons, not sequential additions.
+
+The SEED questions motivating these contrasts are:
+
+| Contrast | Question |
+|------------------------------------|------------------------------------|
+| Parental ages | How does risk compare when both parents are older versus both younger? |
+| Maternal mental health | How does risk compare when both anxiety and depression are present versus neither? |
+| Pregnancy conditions | How does risk compare when both gestational diabetes and maternal hypertension are present versus neither? |
+| All predictors | How does risk compare when all nine predictors are set together to their individually estimated higher-risk versus lower-risk settings? |
+
+The predictor groups are defined in the analysis configuration. The results table reports the actual comparison and reference settings selected from the fitted model.
+
+## Configured joint contrasts
+
+The groups of predictors varied together are listed in `config_1.yaml`, including a comparison involving all configured predictors.
+
+We reuse the fitted outcome model and the preceding population relative-risk calculation. For each predictor, the earlier population PRR posterior median determines the direction: settings are reversed when that median is below 1. The joint comparison therefore combines individually estimated higher-risk settings, and the reference combines individually estimated lower-risk settings. Variables outside each group retain their observed values.
+
+The table states every setting in the numerator and denominator. The intervals summarize posterior uncertainty conditional on the selected directions.
+
+```{r}
+joint_rr_results <- compute_joint_relative_risks(
+  bart_fit = bart_fit,
+  analytic_df = analytic_df,
+  config = final_config,
+  prr_summary = irr_results$weighted_summary,
+  predictor_stats_df = predictor_stats_df
+)
+
+joint_rr_results$weighted_summary |>
+  knitr::kable(
+    digits = 3,
+    col.names = c("Predictors varied together", "Comparison settings (numerator)",
+                  "Reference settings (denominator)", "Posterior mean",
+                  "Posterior median", "95% CrI lower", "95% CrI upper"),
+    caption = "Population relative risks: comparison settings versus reference settings"
+  ) |>
+  kableExtra::kable_styling(full_width = FALSE, position = "center")
+```
+
+The figure shows the same population contrasts in the same order as the table. Points are posterior medians, horizontal lines are 95% credible intervals, and the dashed line marks a relative risk of 1. The comparison and reference settings for each row are given explicitly in the table above.
+
+```{r}
+#| label: fig-cab-joint-prr
+#| fig-cap: "Population relative risks for the configured joint contrasts."
+#| fig-width: 11
+#| fig-height: 8
+
+joint_rr_plot <- plot_joint_relative_risks(
+  joint_rr_results$weighted_summary,
+  config = final_config,
+  save_path = "outputs/joint_relative_risks.png"
+)
+print(joint_rr_plot)
 ```

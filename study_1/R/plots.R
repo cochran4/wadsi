@@ -92,10 +92,17 @@ plot_individual_rr <- function(irr_summary_df,
   # --- Clean contrast labels for continuous predictors ---
   # Replace generic labels like "90th vs. 10th percentile" 
   # with the corresponding numeric values.
-  clean_continuous_contrast <- function(contrast, q10 = NA_real_, q90 = NA_real_) {
-      #  Show the implied low/high values
-      low  <- round(q10)
-      high <- round(q90)
+  clean_continuous_contrast <- function(contrast, q10 = NA_real_, q90 = NA_real_,
+                                        predictor = "") {
+      # Show two decimals for polygenic risk; keep other labels as integers.
+      is_polygenic <- grepl("polygenic|^(prs|pgs)$", predictor, ignore.case = TRUE)
+      if (is_polygenic) {
+        low  <- sprintf("%.2f", q10)
+        high <- sprintf("%.2f", q90)
+      } else {
+        low  <- round(q10)
+        high <- round(q90)
+      }
       return(paste0(high, " vs ", low))
   }
   
@@ -119,7 +126,7 @@ plot_individual_rr <- function(irr_summary_df,
       #   - continuous: use 90th vs 10th percentile values
       #   - categorical: clean 0/1 → No/Yes only when appropriate
       contrast_clean = dplyr::case_when(
-        type == "continuous" ~ clean_continuous_contrast(contrast, q10, q90),
+        type == "continuous" ~ clean_continuous_contrast(contrast, q10, q90, predictor_label),
         TRUE ~ clean_categorical_contrast(contrast, is_binary)
       ),
       

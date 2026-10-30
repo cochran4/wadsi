@@ -54,3 +54,14 @@ predictor_labels:
   hdl_c: "HDL cholesterol, mg/dL"
   tot_chol: "Total cholesterol, mg/dL"
   bp_treated: "Blood pressure medication"
+
+# CAB-motivated addition after acceptance of protocol: joint contrasts from
+# the same fitted model; these comparisons were not specified in the protocol.
+# List only the predictors to vary together.
+# Uses the existing contrast settings, oriented by the earlier population PRR
+# medians to compare individually higher-risk versus lower-risk settings.
+joint_contrasts:
+  - [sbp, tot_chol]
+  - [smoker_current, bp_treated]
+  - [sbp, tot_chol, smoker_current, bp_treated]
+  - [sbp, smoker_current, hdl_c, tot_chol, bp_treated]
